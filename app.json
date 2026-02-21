@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "BRC Ägir Anwesenheit",
+    "slug": "brc-aegir-anwesenheit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "de.brcaegir.anwesenheit"
+    },
+    "android": {
+      "package": "de.brcaegir.anwesenheit"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

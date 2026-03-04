@@ -2,6 +2,9 @@
   "name": "brc-aegir-anwesenheit",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20 <22"
+  },
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
@@ -9,7 +12,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:web": "expo export --platform web",
-    "start:passenger": "node app.js"
+    "start:passenger": "node app.cjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

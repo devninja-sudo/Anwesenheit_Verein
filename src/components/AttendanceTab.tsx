@@ -1,7 +1,8 @@
 import React from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { AttendanceEntry, AttendanceSession, ExcusedChild } from '../types';
 import { formatGermanDateTime } from '../utils/schedule';
+import { useAppTheme } from '../theme/colors';
 
 type AttendanceTabProps = {
   groups: Array<{ key: string; name: string }>;
@@ -21,8 +22,6 @@ type AttendanceTabProps = {
   downloadCsv: (text: string) => void;
 };
 
-const PRIMARY_BLUE = '#2d69a6';
-
 export function AttendanceTab({
   groups,
   selectedGroup,
@@ -40,6 +39,9 @@ export function AttendanceTab({
   copyToClipboard,
   downloadCsv,
 }: AttendanceTabProps) {
+  const colors = useAppTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const formatGermanDate = (value: Date): string => {
     return new Intl.DateTimeFormat('de-DE', {
       weekday: 'short',
@@ -220,26 +222,26 @@ export function AttendanceTab({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   contentCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: '#deebf8',
+    borderColor: colors.border,
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
   },
   textMuted: {
-    color: '#5d6f82',
+    color: colors.textMuted,
     fontSize: 13,
   },
   inlineLabel: {
-    color: '#355a80',
+    color: colors.textMuted,
     fontSize: 13,
     fontWeight: '600',
     marginTop: 2,
@@ -251,55 +253,56 @@ const styles = StyleSheet.create({
   },
   groupChip: {
     borderWidth: 1,
-    borderColor: '#d1e4f6',
+    borderColor: colors.border,
     borderRadius: 16,
     paddingVertical: 7,
     paddingHorizontal: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   groupChipActive: {
-    backgroundColor: '#e8f2fb',
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.primary,
   },
   groupChipText: {
-    color: '#1f3e5d',
+    color: colors.text,
     fontSize: 12,
     fontWeight: '600',
   },
   groupChipTextActive: {
-    color: PRIMARY_BLUE,
+    color: colors.primary,
   },
   calendarWrap: {
     gap: 6,
   },
   calendarSession: {
     borderWidth: 1,
-    borderColor: '#d1e4f6',
+    borderColor: colors.border,
     borderRadius: 8,
     paddingVertical: 9,
     paddingHorizontal: 10,
+    backgroundColor: colors.surface,
   },
   calendarSessionActive: {
-    backgroundColor: '#e8f2fb',
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.primary,
   },
   calendarSessionText: {
-    color: '#1f3e5d',
+    color: colors.text,
     fontSize: 13,
   },
   calendarSessionTextActive: {
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     fontWeight: '700',
   },
   submitButton: {
     marginTop: 8,
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
     borderRadius: 8,
     paddingVertical: 11,
     alignItems: 'center',
   },
   submitText: {
-    color: '#fff',
+    color: colors.buttonPrimaryText,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -308,14 +311,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: '#d6e6f7',
+    borderColor: colors.border,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 10,
-    backgroundColor: '#f9fcff',
+    backgroundColor: colors.surfaceMuted,
   },
   attendanceName: {
-    color: '#2a4d71',
+    color: colors.text,
     fontSize: 13,
     fontWeight: '500',
     flex: 1,
@@ -329,41 +332,41 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#c7dff5',
-    backgroundColor: '#ffffff',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statusButtonPresent: {
-    backgroundColor: PRIMARY_BLUE,
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   statusButtonExcused: {
-    backgroundColor: PRIMARY_BLUE,
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   statusButtonUnexcused: {
-    backgroundColor: PRIMARY_BLUE,
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   statusButtonText: {
-    color: '#3f5f7e',
+    color: colors.textMuted,
     fontSize: 14,
     fontWeight: '600',
   },
   statusButtonTextActive: {
-    color: '#ffffff',
+    color: colors.buttonPrimaryText,
   },
   linkBox: {
     borderWidth: 1,
-    borderColor: '#d6e6f7',
+    borderColor: colors.border,
     borderRadius: 10,
     padding: 8,
     gap: 6,
-    backgroundColor: '#f7fbff',
+    backgroundColor: colors.surfaceMuted,
   },
   linkLabel: {
-    color: '#2f577d',
+    color: colors.text,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -379,29 +382,29 @@ const styles = StyleSheet.create({
   },
   downloadButton: {
     flex: 1,
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
     alignItems: 'center',
   },
   downloadButtonText: {
-    color: '#ffffff',
+    color: colors.buttonPrimaryText,
     fontSize: 13,
     fontWeight: '600',
   },
   copyButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#c6dcf1',
+    borderColor: colors.borderStrong,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     alignItems: 'center',
   },
   copyButtonText: {
-    color: '#2c5a85',
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -409,13 +412,13 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f7fbff',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#d6e6f7',
+    borderColor: colors.border,
   },
   emptyStateText: {
-    color: '#5d6f82',
+    color: colors.textMuted,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,

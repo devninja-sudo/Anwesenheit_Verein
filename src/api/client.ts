@@ -1,4 +1,4 @@
-const fallbackHost = 'http://192.168.178.146:4000';
+const fallbackHost = 'https://aegir.fhagen.de';
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? fallbackHost;
 

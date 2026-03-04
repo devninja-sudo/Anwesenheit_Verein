@@ -20,19 +20,29 @@ import {
   assignUserToGroup,
   createTrainingGroup,
   createTrainingSession,
+  dismissTrainerWarning,
   deleteTrainingGroup,
   getGroupMembers,
   getGroupSessions,
   listTrainingGroups,
   removeSchedule,
   unassignUserFromGroup,
+  upsertTrainerSessionAvailability,
   updateGroupSchedule,
   updateTrainingSession,
   listUsers,
 } from '../api/backendApi';
+import { useAppTheme } from '../theme/colors';
 
 const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-const PRIMARY_BLUE = '#2d69a6';
+const TIME_OPTIONS = Array.from({ length: 34 }, (_, index) => {
+  const totalMinutes = 6 * 60 + index * 30;
+  const hours = Math.floor(totalMinutes / 60)
+    .toString()
+    .padStart(2, '0');
+  const minutes = (totalMinutes % 60).toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+});
 
 type Props = {
   token: string;
@@ -41,6 +51,9 @@ type Props = {
 type TabView = 'groups' | 'schedules' | 'members' | 'sessions';
 
 export function TrainerTab({ token }: Props) {
+  const colors = useAppTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const [view, setView] = useState<TabView>('groups');
   const [groups, setGroups] = useState<TrainingGroupFull[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<TrainingGroupFull | null>(null);
@@ -65,11 +78,15 @@ export function TrainerTab({ token }: Props) {
   const [editScheduleStartTime, setEditScheduleStartTime] = useState('');
   const [editScheduleEndTime, setEditScheduleEndTime] = useState('');
   const [editScheduleLocation, setEditScheduleLocation] = useState('');
+  const [openTimeDropdown, setOpenTimeDropdown] = useState<
+    'add-start' | 'add-end' | 'edit-start' | 'edit-end' | null
+  >(null);
 
   const [showCreateSession, setShowCreateSession] = useState(false);
   const [sessionDate, setSessionDate] = useState('');
   const [sessionComment, setSessionComment] = useState('');
   const [sessionLocation, setSessionLocation] = useState('');
+  const [sessionMinTrainers, setSessionMinTrainers] = useState('1');
 
   useEffect(() => {
     loadGroups();
@@ -207,6 +224,7 @@ export function TrainerTab({ token }: Props) {
       setScheduleStartTime('');
       setScheduleEndTime('');
       setScheduleLocation('');
+      setOpenTimeDropdown(null);
       Alert.alert('Erfolg', 'Zeitplan wurde hinzugefügt');
     } catch (err: any) {
       Alert.alert('Fehler', err.message || 'Failed to add schedule');
@@ -256,6 +274,7 @@ export function TrainerTab({ token }: Props) {
       setGroups(groups.map((group) => (group.id === updated.id ? updated : group)));
       setSelectedGroup(updated);
       setEditingScheduleId(null);
+      setOpenTimeDropdown(null);
       Alert.alert('Erfolg', 'Zeitplan wurde aktualisiert');
     } catch (err: any) {
       Alert.alert('Fehler', err.message || 'Failed to update schedule');
@@ -270,6 +289,7 @@ export function TrainerTab({ token }: Props) {
     setEditScheduleStartTime(schedule.startTime);
     setEditScheduleEndTime(schedule.endTime);
     setEditScheduleLocation(schedule.location ?? '');
+    setOpenTimeDropdown(null);
   }
 
   async function handleAssignUser(userId: number) {
@@ -320,12 +340,14 @@ export function TrainerTab({ token }: Props) {
         scheduledDate: sessionDate,
         comment: sessionComment,
         location: sessionLocation,
+        minTrainers: Math.max(1, Number(sessionMinTrainers) || 1),
       });
       await loadSessions(selectedGroup.id);
       setShowCreateSession(false);
       setSessionDate('');
       setSessionComment('');
       setSessionLocation('');
+      setSessionMinTrainers('1');
       Alert.alert('Erfolg', 'Termin wurde erstellt');
     } catch (err: any) {
       Alert.alert('Fehler', err.message || 'Failed to create session');
@@ -346,6 +368,51 @@ export function TrainerTab({ token }: Props) {
       await loadSessions(selectedGroup!.id);
     } catch (err: any) {
       Alert.alert('Fehler', err.message || 'Failed to update session');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleTrainerAvailability(session: TrainingSessionInstance, status: 'A' | 'U' | 'N') {
+    try {
+      setLoading(true);
+      let targetSessionId = session.id;
+
+      if (session.id <= 0) {
+        const createdSession = await updateTrainingSession(token, session.id, {
+          groupId: session.groupId,
+          scheduledDate: session.scheduledDate,
+          comment: session.comment ?? undefined,
+          location: session.location ?? undefined,
+          minTrainers: session.minTrainers ?? 1,
+        });
+        targetSessionId = createdSession.id;
+      }
+
+      await upsertTrainerSessionAvailability(token, targetSessionId, { status });
+      if (selectedGroup) {
+        await loadSessions(selectedGroup.id);
+      }
+    } catch (err: any) {
+      Alert.alert('Fehler', err.message || 'Rückmeldung konnte nicht gespeichert werden');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDismissWarning(session: TrainingSessionInstance) {
+    if (session.id <= 0) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await dismissTrainerWarning(token, session.id);
+      if (selectedGroup) {
+        await loadSessions(selectedGroup.id);
+      }
+    } catch (err: any) {
+      Alert.alert('Fehler', err.message || 'Warnung konnte nicht verworfen werden');
     } finally {
       setLoading(false);
     }
@@ -461,30 +528,74 @@ export function TrainerTab({ token }: Props) {
                 </View>
                 <TextInput
                   style={styles.input}
-                  placeholder="Startzeit (HH:MM)"
-                  placeholderTextColor="#999"
-                  value={scheduleStartTime}
-                  onChangeText={setScheduleStartTime}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Endzeit (HH:MM)"
-                  placeholderTextColor="#999"
-                  value={scheduleEndTime}
-                  onChangeText={setScheduleEndTime}
-                />
-                <TextInput
-                  style={styles.input}
                   placeholder="Ort (optional)"
                   placeholderTextColor="#999"
                   value={scheduleLocation}
                   onChangeText={setScheduleLocation}
                 />
+                <Text style={styles.label}>Startzeit</Text>
+                <TouchableOpacity
+                  style={styles.selectInput}
+                  onPress={() =>
+                    setOpenTimeDropdown((prev) => (prev === 'add-start' ? null : 'add-start'))
+                  }
+                >
+                  <Text style={styles.selectInputText}>
+                    {scheduleStartTime || 'Startzeit auswählen'}
+                  </Text>
+                </TouchableOpacity>
+                {openTimeDropdown === 'add-start' ? (
+                  <ScrollView style={styles.dropdownList} nestedScrollEnabled>
+                    {TIME_OPTIONS.map((time) => (
+                      <TouchableOpacity
+                        key={`add-start-${time}`}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setScheduleStartTime(time);
+                          setOpenTimeDropdown(null);
+                        }}
+                      >
+                        <Text style={styles.dropdownItemText}>{time}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                ) : null}
+                <Text style={styles.label}>Endzeit</Text>
+                <TouchableOpacity
+                  style={styles.selectInput}
+                  onPress={() => setOpenTimeDropdown((prev) => (prev === 'add-end' ? null : 'add-end'))}
+                >
+                  <Text style={styles.selectInputText}>
+                    {scheduleEndTime || 'Endzeit auswählen'}
+                  </Text>
+                </TouchableOpacity>
+                {openTimeDropdown === 'add-end' ? (
+                  <ScrollView style={styles.dropdownList} nestedScrollEnabled>
+                    {TIME_OPTIONS.map((time) => (
+                      <TouchableOpacity
+                        key={`add-end-${time}`}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setScheduleEndTime(time);
+                          setOpenTimeDropdown(null);
+                        }}
+                      >
+                        <Text style={styles.dropdownItemText}>{time}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                ) : null}
                 <View style={styles.buttonRow}>
                   <TouchableOpacity style={styles.submitButton} onPress={handleAddSchedule} disabled={loading}>
                     <Text style={styles.submitButtonText}>Hinzufügen</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddSchedule(false)}>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => {
+                      setShowAddSchedule(false);
+                      setOpenTimeDropdown(null);
+                    }}
+                  >
                     <Text style={styles.cancelButtonText}>Abbrechen</Text>
                   </TouchableOpacity>
                 </View>
@@ -522,30 +633,76 @@ export function TrainerTab({ token }: Props) {
                       </View>
                       <TextInput
                         style={styles.input}
-                        placeholder="Startzeit (HH:MM)"
-                        placeholderTextColor="#999"
-                        value={editScheduleStartTime}
-                        onChangeText={setEditScheduleStartTime}
-                      />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Endzeit (HH:MM)"
-                        placeholderTextColor="#999"
-                        value={editScheduleEndTime}
-                        onChangeText={setEditScheduleEndTime}
-                      />
-                      <TextInput
-                        style={styles.input}
                         placeholder="Ort (optional)"
                         placeholderTextColor="#999"
                         value={editScheduleLocation}
                         onChangeText={setEditScheduleLocation}
                       />
+                      <Text style={styles.label}>Startzeit</Text>
+                      <TouchableOpacity
+                        style={styles.selectInput}
+                        onPress={() =>
+                          setOpenTimeDropdown((prev) => (prev === 'edit-start' ? null : 'edit-start'))
+                        }
+                      >
+                        <Text style={styles.selectInputText}>
+                          {editScheduleStartTime || 'Startzeit auswählen'}
+                        </Text>
+                      </TouchableOpacity>
+                      {openTimeDropdown === 'edit-start' ? (
+                        <ScrollView style={styles.dropdownList} nestedScrollEnabled>
+                          {TIME_OPTIONS.map((time) => (
+                            <TouchableOpacity
+                              key={`edit-start-${time}`}
+                              style={styles.dropdownItem}
+                              onPress={() => {
+                                setEditScheduleStartTime(time);
+                                setOpenTimeDropdown(null);
+                              }}
+                            >
+                              <Text style={styles.dropdownItemText}>{time}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      ) : null}
+                      <Text style={styles.label}>Endzeit</Text>
+                      <TouchableOpacity
+                        style={styles.selectInput}
+                        onPress={() =>
+                          setOpenTimeDropdown((prev) => (prev === 'edit-end' ? null : 'edit-end'))
+                        }
+                      >
+                        <Text style={styles.selectInputText}>
+                          {editScheduleEndTime || 'Endzeit auswählen'}
+                        </Text>
+                      </TouchableOpacity>
+                      {openTimeDropdown === 'edit-end' ? (
+                        <ScrollView style={styles.dropdownList} nestedScrollEnabled>
+                          {TIME_OPTIONS.map((time) => (
+                            <TouchableOpacity
+                              key={`edit-end-${time}`}
+                              style={styles.dropdownItem}
+                              onPress={() => {
+                                setEditScheduleEndTime(time);
+                                setOpenTimeDropdown(null);
+                              }}
+                            >
+                              <Text style={styles.dropdownItemText}>{time}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      ) : null}
                       <View style={styles.buttonRow}>
                         <TouchableOpacity style={styles.submitButton} onPress={handleUpdateSchedule} disabled={loading}>
                           <Text style={styles.submitButtonText}>Speichern</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.cancelButton} onPress={() => setEditingScheduleId(null)}>
+                        <TouchableOpacity
+                          style={styles.cancelButton}
+                          onPress={() => {
+                            setEditingScheduleId(null);
+                            setOpenTimeDropdown(null);
+                          }}
+                        >
                           <Text style={styles.cancelButtonText}>Abbrechen</Text>
                         </TouchableOpacity>
                       </View>
@@ -642,6 +799,14 @@ export function TrainerTab({ token }: Props) {
                   value={sessionLocation}
                   onChangeText={setSessionLocation}
                 />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Minimale Trainerzahl"
+                  placeholderTextColor="#999"
+                  keyboardType="number-pad"
+                  value={sessionMinTrainers}
+                  onChangeText={setSessionMinTrainers}
+                />
                 <View style={styles.buttonRow}>
                   <TouchableOpacity style={styles.submitButton} onPress={handleCreateSession} disabled={loading}>
                     <Text style={styles.submitButtonText}>Erstellen</Text>
@@ -654,9 +819,16 @@ export function TrainerTab({ token }: Props) {
             )}
 
             {(sessions || [])
-              .sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime())
+              .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())
               .map((session) => (
-                <View key={session.id} style={[styles.sessionCard, session.isCancelled && styles.sessionCancelled]}>
+                <View
+                  key={session.id}
+                  style={[
+                    styles.sessionCard,
+                    session.isCancelled && styles.sessionCancelled,
+                    session.availabilitySummary?.isWarning && !session.isCancelled && styles.sessionWarning,
+                  ]}
+                >
                   <View style={styles.sessionInfo}>
                     <Text style={styles.sessionDate}>
                       {new Date(session.scheduledDate).toLocaleDateString('de-DE', {
@@ -669,6 +841,37 @@ export function TrainerTab({ token }: Props) {
                     {session.comment && <Text style={styles.sessionComment}>💬 {session.comment}</Text>}
                     {session.location && <Text style={styles.sessionLocation}>📍 {session.location}</Text>}
                     {session.isCancelled && <Text style={styles.cancelledLabel}>❌ Ausgefallen</Text>}
+                    <Text style={styles.sessionMetaRow}>
+                      Min. Trainer: {session.minTrainers ?? 1} · A {session.availabilitySummary?.available ?? 0} · U {session.availabilitySummary?.uncertain ?? 0} · N {session.availabilitySummary?.notAvailable ?? 0}
+                    </Text>
+                    {session.availabilitySummary?.isWarning && !session.isCancelled && session.id > 0 ? (
+                      <View style={styles.warningBanner}>
+                        <Text style={styles.warningText}>⚠️ Mindestanzahl Trainer noch nicht erreicht</Text>
+                        <TouchableOpacity style={styles.warningDismissButton} onPress={() => handleDismissWarning(session)}>
+                          <Text style={styles.warningDismissText}>Ich übernehme alleine</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                    <View style={styles.availabilityRow}>
+                      <TouchableOpacity
+                        style={[styles.availabilityButton, session.myTrainerStatus === 'A' && styles.availabilityButtonActive]}
+                        onPress={() => handleTrainerAvailability(session, 'A')}
+                      >
+                        <Text style={styles.availabilityText}>A</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.availabilityButton, session.myTrainerStatus === 'U' && styles.availabilityButtonActive]}
+                        onPress={() => handleTrainerAvailability(session, 'U')}
+                      >
+                        <Text style={styles.availabilityText}>U</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.availabilityButton, session.myTrainerStatus === 'N' && styles.availabilityButtonActive]}
+                        onPress={() => handleTrainerAvailability(session, 'N')}
+                      >
+                        <Text style={styles.availabilityText}>N</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                   <TouchableOpacity
                     style={[styles.toggleButton, session.isCancelled && styles.toggleButtonActive]}
@@ -683,7 +886,7 @@ export function TrainerTab({ token }: Props) {
 
         {loading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={PRIMARY_BLUE} />
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
         )}
       </ScrollView>
@@ -691,25 +894,25 @@ export function TrainerTab({ token }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     padding: 16,
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.border,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.border,
   },
   tabButton: {
     flex: 1,
@@ -718,14 +921,14 @@ const styles = StyleSheet.create({
   },
   tabButtonActive: {
     borderBottomWidth: 3,
-    borderBottomColor: PRIMARY_BLUE,
+    borderBottomColor: colors.primary,
   },
   tabButtonText: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textMuted,
   },
   tabButtonTextActive: {
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     fontWeight: '600',
   },
   scrollView: {
@@ -733,37 +936,71 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   addButton: {
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 12,
   },
   addButtonText: {
-    color: 'white',
+    color: colors.buttonPrimaryText,
     fontSize: 15,
     fontWeight: '600',
   },
   formCard: {
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: colors.border,
   },
   formTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     marginBottom: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: colors.borderStrong,
     borderRadius: 6,
     padding: 10,
     marginBottom: 10,
+    fontSize: 14,
+    backgroundColor: colors.surface,
+    color: colors.text,
+  },
+  selectInput: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: colors.surface,
+  },
+  selectInputText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  dropdownList: {
+    maxHeight: 150,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 6,
+    backgroundColor: colors.surface,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  dropdownItem: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  dropdownItemText: {
+    color: colors.text,
     fontSize: 14,
   },
   inputMultiline: {
@@ -773,7 +1010,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#666',
+    color: colors.textMuted,
     marginBottom: 8,
     marginTop: 8,
   },
@@ -784,77 +1021,79 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     flex: 1,
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
     padding: 12,
     borderRadius: 6,
     alignItems: 'center',
   },
   submitButtonText: {
-    color: 'white',
+    color: colors.buttonPrimaryText,
     fontSize: 14,
     fontWeight: '600',
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.surfaceMuted,
     padding: 12,
     borderRadius: 6,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
   },
   cancelButtonText: {
-    color: 'white',
+    color: colors.text,
     fontSize: 14,
     fontWeight: '600',
   },
   groupCard: {
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: colors.border,
   },
   groupCardActive: {
-    borderColor: PRIMARY_BLUE,
+    borderColor: colors.primary,
     borderWidth: 2,
-    backgroundColor: '#f0f8ff',
+    backgroundColor: colors.surfaceMuted,
   },
   groupName: {
     fontSize: 16,
     fontWeight: '600',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     marginBottom: 4,
   },
   groupInfo: {
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
     marginBottom: 4,
   },
   groupDescription: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textSoft,
   },
   groupHint: {
     fontSize: 11,
-    color: '#6c8094',
+    color: colors.textSoft,
     marginTop: 6,
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     marginBottom: 12,
   },
   scheduleCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: colors.border,
   },
   scheduleInfo: {
     flex: 1,
@@ -868,29 +1107,31 @@ const styles = StyleSheet.create({
   scheduleDay: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text,
   },
   scheduleTime: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textMuted,
     marginTop: 2,
   },
   scheduleLocation: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textSoft,
     marginTop: 2,
   },
   deleteButton: {
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
   },
   editButton: {
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.surfaceMuted,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
   },
   weekdayWrap: {
     flexDirection: 'row',
@@ -900,26 +1141,26 @@ const styles = StyleSheet.create({
   },
   weekdayButton: {
     borderWidth: 1,
-    borderColor: '#d1e4f6',
+    borderColor: colors.border,
     borderRadius: 14,
     paddingVertical: 6,
     paddingHorizontal: 8,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
   },
   weekdayButtonActive: {
-    backgroundColor: '#e8f2fb',
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.primary,
   },
   weekdayButtonText: {
     fontSize: 12,
-    color: '#1f3e5d',
+    color: colors.text,
     fontWeight: '600',
   },
   weekdayButtonTextActive: {
-    color: PRIMARY_BLUE,
+    color: colors.primary,
   },
   deleteButtonText: {
-    color: 'white',
+    color: colors.buttonPrimaryText,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -927,57 +1168,61 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   userItem: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: colors.surfaceMuted,
     padding: 12,
     borderRadius: 6,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#dee2e6',
+    borderColor: colors.border,
   },
   userName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text,
   },
   userEmail: {
     fontSize: 12,
-    color: '#666',
+    color: colors.textMuted,
     marginTop: 2,
   },
   memberCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: colors.border,
   },
   memberName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text,
   },
   memberEmail: {
     fontSize: 12,
-    color: '#666',
+    color: colors.textMuted,
     marginTop: 2,
   },
   sessionCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: colors.border,
   },
   sessionCancelled: {
-    backgroundColor: '#ffeeee',
+    backgroundColor: colors.surfaceMuted,
+  },
+  sessionWarning: {
+    borderColor: colors.warning,
+    borderWidth: 2,
   },
   sessionInfo: {
     flex: 1,
@@ -985,35 +1230,90 @@ const styles = StyleSheet.create({
   sessionDate: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text,
   },
   sessionComment: {
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
     marginTop: 4,
   },
   sessionLocation: {
     fontSize: 13,
-    color: '#666',
+    color: colors.textMuted,
     marginTop: 2,
+  },
+  sessionMetaRow: {
+    fontSize: 12,
+    color: colors.textSoft,
+    marginTop: 4,
+  },
+  warningBanner: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 6,
+    padding: 8,
+    gap: 6,
+  },
+  warningText: {
+    color: colors.warning,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  warningDismissButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.warning,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  warningDismissText: {
+    color: colors.warning,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  availabilityRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 8,
+  },
+  availabilityButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
+  availabilityButtonActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceMuted,
+  },
+  availabilityText: {
+    color: colors.text,
+    fontWeight: '700',
   },
   cancelledLabel: {
     fontSize: 13,
-    color: '#dc3545',
+    color: colors.danger,
     fontWeight: '600',
     marginTop: 4,
   },
   toggleButton: {
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
   },
   toggleButtonActive: {
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
   },
   toggleButtonText: {
-    color: 'white',
+    color: colors.buttonPrimaryText,
     fontSize: 12,
     fontWeight: '600',
   },

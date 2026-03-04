@@ -1,8 +1,9 @@
 import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { API_BASE_URL } from '../api/client';
+import { useAppTheme } from '../theme/colors';
 
-type AuthView = 'login' | 'request' | 'setup';
+type AuthView = 'login' | 'request';
 
 type AuthScreenProps = {
   authView: AuthView;
@@ -11,20 +12,13 @@ type AuthScreenProps = {
   setEmail: (email: string) => void;
   password: string;
   setPassword: (password: string) => void;
-  setupTokenInput: string;
-  setSetupTokenInput: (token: string) => void;
-  setupPasswordInput: string;
-  setSetupPasswordInput: (password: string) => void;
   authError: string;
   authMessage: string;
   lastSetupLink: string;
   onLogin: () => void;
   onRequestSetup: () => void;
-  onSetupPassword: () => void;
   copyToClipboard: (text: string) => void;
 };
-
-const PRIMARY_BLUE = '#2d69a6';
 
 export function AuthScreen({
   authView,
@@ -33,18 +27,16 @@ export function AuthScreen({
   setEmail,
   password,
   setPassword,
-  setupTokenInput,
-  setSetupTokenInput,
-  setupPasswordInput,
-  setSetupPasswordInput,
   authError,
   authMessage,
   lastSetupLink,
   onLogin,
   onRequestSetup,
-  onSetupPassword,
   copyToClipboard,
 }: AuthScreenProps) {
+  const colors = useAppTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
     <ScrollView contentContainerStyle={styles.loginContainer}>
       <Image
@@ -65,18 +57,6 @@ export function AuthScreen({
             onPress={() => setAuthView('login')}
           >
             <Text style={styles.chipText}>Login</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.chip, authView === 'request' && styles.chipActive]}
-            onPress={() => setAuthView('request')}
-          >
-            <Text style={styles.chipText}>Passwort-Link</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.chip, authView === 'setup' && styles.chipActive]}
-            onPress={() => setAuthView('setup')}
-          >
-            <Text style={styles.chipText}>Passwort setzen</Text>
           </TouchableOpacity>
         </View>
 
@@ -100,6 +80,9 @@ export function AuthScreen({
             <TouchableOpacity style={styles.submitButton} onPress={onLogin}>
               <Text style={styles.submitText}>Einloggen</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => setAuthView('request')}>
+              <Text style={styles.secondaryButtonText}>Passwort vergessen?</Text>
+            </TouchableOpacity>
           </>
         ) : null}
 
@@ -116,27 +99,8 @@ export function AuthScreen({
             <TouchableOpacity style={styles.submitButton} onPress={onRequestSetup}>
               <Text style={styles.submitText}>Link anfordern</Text>
             </TouchableOpacity>
-          </>
-        ) : null}
-
-        {authView === 'setup' ? (
-          <>
-            <TextInput
-              style={styles.input}
-              placeholder="Setup Token"
-              autoCapitalize="none"
-              value={setupTokenInput}
-              onChangeText={setSetupTokenInput}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Neues Passwort"
-              secureTextEntry
-              value={setupPasswordInput}
-              onChangeText={setSetupPasswordInput}
-            />
-            <TouchableOpacity style={styles.submitButton} onPress={onSetupPassword}>
-              <Text style={styles.submitText}>Passwort speichern</Text>
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => setAuthView('login')}>
+              <Text style={styles.secondaryButtonText}>Zurück zum Login</Text>
             </TouchableOpacity>
           </>
         ) : null}
@@ -160,39 +124,46 @@ export function AuthScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   loginContainer: {
+    flexGrow: 1,
     padding: 16,
-    paddingTop: 26,
+    paddingTop: 56,
     gap: 14,
     alignItems: 'center',
+    justifyContent: 'flex-start',
+    backgroundColor: colors.background,
   },
   logo: {
     width: 96,
     height: 96,
   },
   brandTitle: {
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     fontSize: 28,
     fontWeight: '800',
   },
   brandSubTitle: {
-    color: '#4e6780',
+    color: colors.textMuted,
     fontSize: 13,
     marginBottom: 6,
   },
   contentCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 14,
-    padding: 12,
+    padding: 16,
     gap: 10,
     borderWidth: 1,
-    borderColor: '#deebf8',
+    borderColor: colors.border,
+    width: '100%',
+    maxWidth: 620,
+    minHeight: 360,
+    justifyContent: 'center',
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
   },
   row: {
     flexDirection: 'row',
@@ -201,80 +172,94 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1,
-    borderColor: '#c7dff5',
+    borderColor: colors.borderStrong,
     borderRadius: 20,
     paddingVertical: 7,
     paddingHorizontal: 12,
+    backgroundColor: colors.surface,
   },
   chipActive: {
-    backgroundColor: '#e7f1fb',
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.primary,
   },
   chipText: {
-    color: '#234b73',
+    color: colors.text,
     fontWeight: '500',
     fontSize: 13,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#c7dff5',
+    borderColor: colors.borderStrong,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 9,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     fontSize: 14,
-    color: '#22384e',
+    color: colors.text,
   },
   hint: {
-    color: '#6c8094',
+    color: colors.textSoft,
     fontSize: 13,
   },
   error: {
-    color: '#b91c1c',
+    color: colors.danger,
     fontWeight: '600',
     fontSize: 13,
   },
   success: {
-    color: '#166534',
+    color: colors.success,
     fontWeight: '600',
     fontSize: 13,
   },
   submitButton: {
     marginTop: 8,
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
     borderRadius: 8,
     paddingVertical: 11,
     alignItems: 'center',
   },
   submitText: {
-    color: '#fff',
+    color: colors.buttonPrimaryText,
     fontWeight: '700',
     fontSize: 14,
   },
   linkBox: {
     borderWidth: 1,
-    borderColor: '#d6e6f7',
+    borderColor: colors.border,
     borderRadius: 10,
     padding: 8,
     gap: 6,
-    backgroundColor: '#f7fbff',
+    backgroundColor: colors.surfaceMuted,
   },
   linkText: {
-    color: '#2f577d',
+    color: colors.textMuted,
     fontSize: 12,
   },
   copyButton: {
     alignSelf: 'flex-start',
     borderWidth: 1,
-    borderColor: '#c6dcf1',
+    borderColor: colors.borderStrong,
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   copyButtonText: {
-    color: '#2c5a85',
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '600',
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  secondaryButtonText: {
+    color: colors.primary,
+    fontWeight: '600',
+    fontSize: 13,
   },
 });

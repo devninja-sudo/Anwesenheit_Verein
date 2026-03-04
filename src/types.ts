@@ -44,7 +44,23 @@ export type TrainingSessionInstance = {
   comment?: string | null;
   location?: string | null;
   isCancelled: boolean;
+  minTrainers?: number;
+  trainerWarningDismissed?: boolean;
+  myTrainerStatus?: TrainerAvailabilityStatus | null;
+  availabilitySummary?: TrainerAvailabilitySummary;
   createdAt: string;
+};
+
+export type TrainerAvailabilityStatus = 'A' | 'U' | 'N';
+
+export type TrainerAvailabilitySummary = {
+  available: number;
+  uncertain: number;
+  notAvailable: number;
+  totalResponses: number;
+  minimumRequired: number;
+  isWarning: boolean;
+  isDismissed: boolean;
 };
 
 export type GroupMember = {
@@ -93,6 +109,7 @@ export type CreateSessionInput = {
   scheduledDate: string;
   comment?: string;
   location?: string;
+  minTrainers?: number;
 };
 
 export type UpdateSessionInput = {
@@ -102,6 +119,8 @@ export type UpdateSessionInput = {
   comment?: string;
   location?: string;
   isCancelled?: boolean;
+  minTrainers?: number;
+  trainerWarningDismissed?: boolean;
 };
 
 export type AssignUserInput = {

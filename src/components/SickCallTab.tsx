@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { AbsenceRecord, AppUser, ChildLink, ReporterType } from '../types';
 import { formatGermanDateTime } from '../utils/schedule';
+import { useAppTheme } from '../theme/colors';
 
 type SickCallTabProps = {
   currentUser: AppUser;
@@ -28,8 +29,6 @@ type SickCallTabProps = {
   submitSickCall: () => void;
 };
 
-const PRIMARY_BLUE = '#2d69a6';
-
 export function SickCallTab({
   currentUser,
   reporterType,
@@ -54,6 +53,9 @@ export function SickCallTab({
   success,
   submitSickCall,
 }: SickCallTabProps) {
+  const colors = useAppTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const formatGermanDate = (value: Date): string => {
     return new Intl.DateTimeFormat('de-DE', {
       weekday: 'short',
@@ -65,7 +67,7 @@ export function SickCallTab({
   return (
     <View style={styles.contentCard}>
       <Text style={styles.sectionTitle}>Krankmeldung</Text>
-      <Text style={styles.textMuted}>Abmeldung ist nur mindestens 24h vor Trainingsbeginn möglich.</Text>
+      <Text style={styles.textMuted}>Abmeldung unter 24h ist mit Begründung möglich.</Text>
 
       <View style={styles.row}>
         <TouchableOpacity
@@ -215,22 +217,22 @@ export function SickCallTab({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   contentCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: '#deebf8',
+    borderColor: colors.border,
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
   },
   textMuted: {
-    color: '#5d6f82',
+    color: colors.textMuted,
     fontSize: 13,
   },
   row: {
@@ -240,74 +242,76 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1,
-    borderColor: '#c7dff5',
+    borderColor: colors.borderStrong,
     borderRadius: 20,
     paddingVertical: 7,
     paddingHorizontal: 12,
+    backgroundColor: colors.surface,
   },
   chipActive: {
-    backgroundColor: '#e7f1fb',
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.primary,
   },
   chipText: {
-    color: '#234b73',
+    color: colors.text,
     fontWeight: '500',
     fontSize: 13,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#c7dff5',
+    borderColor: colors.borderStrong,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 9,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     fontSize: 14,
-    color: '#22384e',
+    color: colors.text,
   },
   inlineLabel: {
-    color: '#355a80',
+    color: colors.textMuted,
     fontSize: 13,
     fontWeight: '600',
     marginTop: 2,
   },
   groupItem: {
     borderWidth: 1,
-    borderColor: '#d1e4f6',
+    borderColor: colors.border,
     borderRadius: 8,
     paddingVertical: 9,
     paddingHorizontal: 10,
+    backgroundColor: colors.surface,
   },
   groupItemActive: {
-    backgroundColor: '#ebf4fc',
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.primary,
   },
   groupText: {
-    color: '#1f3e5d',
+    color: colors.text,
     fontSize: 13,
   },
   hint: {
-    color: '#6c8094',
+    color: colors.textSoft,
     fontSize: 13,
   },
   error: {
-    color: '#b91c1c',
+    color: colors.danger,
     fontWeight: '600',
     fontSize: 13,
   },
   success: {
-    color: '#166534',
+    color: colors.success,
     fontWeight: '600',
     fontSize: 13,
   },
   submitButton: {
     marginTop: 8,
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: colors.primary,
     borderRadius: 8,
     paddingVertical: 11,
     alignItems: 'center',
   },
   submitText: {
-    color: '#fff',
+    color: colors.buttonPrimaryText,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -316,72 +320,73 @@ const styles = StyleSheet.create({
   },
   calendarDayCard: {
     borderWidth: 1,
-    borderColor: '#d4e7f8',
+    borderColor: colors.border,
     borderRadius: 10,
     padding: 8,
     gap: 6,
-    backgroundColor: '#f7fbff',
+    backgroundColor: colors.surfaceMuted,
   },
   calendarDayTitle: {
-    color: '#2b4d72',
+    color: colors.text,
     fontWeight: '700',
     fontSize: 12,
   },
   calendarEmpty: {
-    color: '#7b8fa3',
+    color: colors.textSoft,
     fontSize: 12,
   },
   calendarSession: {
     borderWidth: 1,
-    borderColor: '#d1e4f6',
+    borderColor: colors.border,
     borderRadius: 8,
     paddingVertical: 7,
     paddingHorizontal: 8,
+    backgroundColor: colors.surface,
   },
   calendarSessionActive: {
-    backgroundColor: '#e8f2fb',
-    borderColor: PRIMARY_BLUE,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.primary,
   },
   calendarSessionText: {
-    color: '#1f3e5d',
+    color: colors.text,
     fontSize: 12,
   },
   calendarSessionTextActive: {
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     fontWeight: '700',
   },
   calendarSessionCancelled: {
-    backgroundColor: '#fee',
-    borderColor: '#fcc',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.danger,
     opacity: 0.6,
   },
   calendarSessionAbsent: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fde68a',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.warning,
   },
   cancelledBanner: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 6,
     paddingVertical: 5,
     paddingHorizontal: 8,
     borderWidth: 1,
-    borderColor: '#fca5a5',
+    borderColor: colors.danger,
   },
   cancelledText: {
-    color: '#991b1b',
+    color: colors.danger,
     fontSize: 12,
     fontWeight: '600',
   },
   absenceBanner: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 6,
     paddingVertical: 5,
     paddingHorizontal: 8,
     borderWidth: 1,
-    borderColor: '#fcd34d',
+    borderColor: colors.warning,
   },
   absenceText: {
-    color: '#92400e',
+    color: colors.warning,
     fontSize: 12,
     fontWeight: '600',
   },

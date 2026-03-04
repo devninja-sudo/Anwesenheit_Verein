@@ -1,6 +1,9 @@
 # BRC Ägir Anwesenheit (MVP)
 
-Diese App ist als **echte Mobile-App** für **iOS/iPadOS und Android** aufgebaut (Expo + React Native).
+Diese App ist als **Android-App + Web-App** aufgebaut (Expo + React Native):
+
+- **Android:** native App (APK/AAB)
+- **iOS/iPadOS:** Nutzung über die Web-App im Safari-Browser
 
 ## Warum nicht nur Electron?
 
@@ -11,7 +14,7 @@ Für eure Anforderungen wurde daher ein mobiler Stack gewählt.
 
 - Standardstatus jedes Athleten: **Anwesend**
 - Es werden nur Krankmeldungen gespeichert
-- Krankmeldung nur erlaubt, wenn der Trainingsbeginn mindestens **24 Stunden** in der Zukunft liegt
+- Krankmeldung bis **24 Stunden vorher frei**, unter 24 Stunden nur mit Begründung
 - 3 Trainingsgruppen mit je eigenen Trainingszeiten
 
 ## Gruppen im MVP
@@ -32,8 +35,14 @@ npm run start
 
 3. Danach in Expo:
 	- `a` für Android Emulator / angeschlossenes Gerät
-	- `i` für iOS Simulator (nur auf macOS)
-	- oder Expo Go auf echtem Gerät per QR Code
+	- `w` für Web-App (auch für iPhone/iPad in Safari)
+	- oder Expo Go auf Android per QR Code
+
+## Zielplattformen
+
+- **Produktiv Android:** `eas build --platform android --profile production`
+- **Produktiv iOS:** Web-Deployment statt nativer iOS-App
+- Für iPhone/iPad: Web-App in Safari öffnen und „Zum Home-Bildschirm" verwenden
 
 ## Backend-Anbindung
 

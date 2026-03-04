@@ -16,6 +16,7 @@ import {
   ReporterType,
   TrainingGroupFull,
   TrainingSessionInstance,
+  TrainerAvailabilityStatus,
   UpdateGroupInput,
   UpdateScheduleInput,
   UpdateSessionInput,
@@ -62,6 +63,17 @@ export async function setupPassword(token: string, password: string): Promise<{ 
   });
 }
 
+export async function registerPushToken(
+  token: string,
+  payload: { token: string; platform?: 'ios' | 'android' | 'web' },
+): Promise<{ message: string }> {
+  return apiRequest('/api/auth/push-token', {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
 export async function getCurrentUser(token: string): Promise<AuthUser> {
   return apiRequest('/api/auth/me', {
     token,
@@ -98,12 +110,13 @@ export async function deleteUser(token: string, userId: number): Promise<void> {
   });
 }
 
-export async function listAbsences(): Promise<AbsenceRecord[]> {
-  const rows = await apiRequest<BackendAbsence[]>('/api/absences');
+export async function listAbsences(token: string): Promise<AbsenceRecord[]> {
+  const rows = await apiRequest<BackendAbsence[]>('/api/absences', { token });
   return rows.map(normalizeAbsence);
 }
 
 export async function createAbsence(payload: {
+  token: string;
   athleteName: string;
   reporterName: string;
   reporterType: ReporterType;
@@ -111,9 +124,11 @@ export async function createAbsence(payload: {
   trainingStartIso: string;
   reasonText?: string;
 }): Promise<AbsenceRecord> {
+  const { token, ...body } = payload;
   const result = await apiRequest<BackendAbsence>('/api/absences', {
     method: 'POST',
-    body: payload,
+    token,
+    body,
   });
   return normalizeAbsence(result);
 }
@@ -279,4 +294,31 @@ export async function updateTrainingSession(token: string, sessionId: number, da
 
 export async function getMyGroups(token: string): Promise<TrainingGroupFull[]> {
   return apiRequest('/api/training-groups/my-groups', { token });
+}
+
+export async function getChildGroups(token: string, childId: number): Promise<TrainingGroupFull[]> {
+  return apiRequest(`/api/training-groups/children/${childId}/groups`, { token });
+}
+
+export async function getTrainerSessionAvailability(token: string, sessionId: number) {
+  return apiRequest(`/api/training-groups/sessions/${sessionId}/availability`, { token });
+}
+
+export async function upsertTrainerSessionAvailability(
+  token: string,
+  sessionId: number,
+  payload: { status: TrainerAvailabilityStatus; note?: string },
+) {
+  return apiRequest(`/api/training-groups/sessions/${sessionId}/availability`, {
+    method: 'POST',
+    token,
+    body: payload,
+  });
+}
+
+export async function dismissTrainerWarning(token: string, sessionId: number): Promise<{ success: boolean }> {
+  return apiRequest(`/api/training-groups/sessions/${sessionId}/cover-alone`, {
+    method: 'POST',
+    token,
+  });
 }

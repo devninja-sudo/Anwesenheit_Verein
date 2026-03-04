@@ -1,14 +1,19 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Clipboard from 'expo-clipboard';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createAbsence,
   createAttendanceSession,
   deleteUser,
   createUser,
   exportAttendanceCsv,
+  getChildGroups,
   getGroupSessions,
+  getCurrentUser,
   getMyGroups,
   listAttendanceEntries,
   listAttendanceSessions,
@@ -20,8 +25,8 @@ import {
   listUsers,
   listUsersByRole,
   login,
+  registerPushToken,
   requestPasswordSetup,
-  setupPassword,
   upsertAttendanceEntry,
 } from './src/api/backendApi';
 import type {
@@ -43,23 +48,40 @@ import { SickCallTab } from './src/components/SickCallTab';
 import { AttendanceTab } from './src/components/AttendanceTab';
 import { AdminTab } from './src/components/AdminTab';
 import { TrainerTab } from './src/components/TrainerTab';
+import { useAppTheme } from './src/theme/colors';
 
 type AppTab = 'start' | 'meldung' | 'attendance' | 'groups' | 'admin';
-type AuthView = 'login' | 'request' | 'setup';
+type AuthView = 'login' | 'request';
 
-const PRIMARY_BLUE = '#2d69a6';
+const AUTH_TOKEN_STORAGE_KEY = 'aegir_auth_token';
 
 export default function App() {
+  const colors = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const isIosWeb =
+    Platform.OS === 'web' &&
+    typeof navigator !== 'undefined' &&
+    /iPad|iPhone|iPod/i.test(navigator.userAgent);
+  const isStandaloneDisplayMode =
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(display-mode: standalone)').matches;
+  const isIosStandalone =
+    isIosWeb &&
+    ((((navigator as Navigator & { standalone?: boolean }).standalone) ?? false) ||
+      isStandaloneDisplayMode);
+  const showIosInstallBanner = isIosWeb && !isIosStandalone;
+
   const [authToken, setAuthToken] = useState('');
   const [authView, setAuthView] = useState<AuthView>('login');
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
 
   const [activeTab, setActiveTab] = useState<AppTab>('start');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [setupTokenInput, setSetupTokenInput] = useState('');
-  const [setupPasswordInput, setSetupPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
   const [authMessage, setAuthMessage] = useState('');
 
@@ -86,8 +108,6 @@ export default function App() {
   const [newUserRole, setNewUserRole] = useState<CreateUserRole>('child');
   const [adminError, setAdminError] = useState('');
   const [lastSetupLink, setLastSetupLink] = useState('');
-  const [parentIdForLink, setParentIdForLink] = useState('');
-  const [childIdForLink, setChildIdForLink] = useState('');
 
   // Family states
   const [linkedChildren, setLinkedChildren] = useState<ChildLink[]>([]);
@@ -98,6 +118,42 @@ export default function App() {
   const [attendanceEntries, setAttendanceEntries] = useState<AttendanceEntry[]>([]);
   const [excusedChildren, setExcusedChildren] = useState<ExcusedChild[]>([]);
   const [csvExport, setCsvExport] = useState('');
+
+  const ensurePushTokenRegistered = React.useCallback(async () => {
+    if (!authToken || !currentUser) {
+      return;
+    }
+
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    try {
+      const existing = await Notifications.getPermissionsAsync();
+      let granted = existing.granted;
+      if (!granted) {
+        const requested = await Notifications.requestPermissionsAsync();
+        granted = requested.granted;
+      }
+      if (!granted) {
+        return;
+      }
+
+      const projectId =
+        (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId;
+
+      const pushTokenResponse = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId } : undefined,
+      );
+
+      await registerPushToken(authToken, {
+        token: pushTokenResponse.data,
+        platform: 'android',
+      });
+    } catch {
+      // ignore push registration errors in UI flow
+    }
+  }, [authToken, currentUser]);
 
   // Computed values
   const currentGroup = useMemo(
@@ -201,12 +257,16 @@ export default function App() {
 
   // Data loading
   const fetchAbsenceFeed = React.useCallback(async () => {
-    try {
-      setAbsences(await listAbsences());
-    } catch {
-      // silently ignore
+    if (!authToken || (currentUser?.role !== 'trainer' && currentUser?.role !== 'admin')) {
+      setAbsences([]);
+      return;
     }
-  }, []);
+    try {
+      setAbsences(await listAbsences(authToken));
+    } catch {
+      setAbsences([]);
+    }
+  }, [authToken, currentUser?.role]);
 
   const loadLinkedChildren = React.useCallback(async () => {
     if (!authToken) return;
@@ -242,9 +302,14 @@ export default function App() {
     try {
       // For children, load only their assigned groups
       // For trainers/admin, load all groups
-      const groups = currentUser.role === 'child' 
-        ? await getMyGroups(authToken)
-        : await listTrainingGroups(authToken);
+      const groups =
+        currentUser.role === 'child'
+          ? await getMyGroups(authToken)
+          : currentUser.role === 'parent' && selectedChildId
+            ? await getChildGroups(authToken, selectedChildId)
+            : currentUser.role === 'parent'
+              ? []
+              : await listTrainingGroups(authToken);
       const validGroups = Array.isArray(groups) ? groups : [];
       setTrainingGroups(validGroups);
 
@@ -270,7 +335,7 @@ export default function App() {
     } catch {
       setTrainingGroups([]);
     }
-  }, [authToken, currentUser, selectedGroup, selectedAttendanceGroup]);
+  }, [authToken, currentUser, selectedGroup, selectedAttendanceGroup, selectedChildId]);
 
   const loadAttendanceEntries = React.useCallback(
     async (sessions: AttendanceSession[]) => {
@@ -348,6 +413,10 @@ export default function App() {
   }, [selectedAttendanceSessionIso, attendanceSessions, loadAttendanceEntries]);
 
   React.useEffect(() => {
+    ensurePushTokenRegistered();
+  }, [ensurePushTokenRegistered]);
+
+  React.useEffect(() => {
     const firstAttendanceSession = attendanceUpcomingSessions.at(0);
     if (firstAttendanceSession) {
       setSelectedAttendanceSessionIso(firstAttendanceSession.toISOString());
@@ -355,6 +424,45 @@ export default function App() {
     }
     setSelectedAttendanceSessionIso('');
   }, [selectedAttendanceGroup, attendanceUpcomingSessions]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+        if (!storedToken) {
+          return;
+        }
+
+        const user = await getCurrentUser(storedToken);
+        if (cancelled) {
+          return;
+        }
+
+        setAuthToken(storedToken);
+        setCurrentUser(user);
+        setReporterName(user.displayName);
+        setReporterType(user.role === 'parent' ? 'parent' : 'athlete');
+        setActiveTab('start');
+        if (user.role === 'child') {
+          setAthleteName(user.displayName);
+        }
+      } catch {
+        await AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+      } finally {
+        if (!cancelled) {
+          setIsRestoringSession(false);
+        }
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Auth handlers
   const onLogin = async () => {
@@ -368,13 +476,13 @@ export default function App() {
 
     try {
       const result = await login(email.trim().toLowerCase(), password);
+      await AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, result.accessToken);
       setAuthToken(result.accessToken);
       setCurrentUser(result.user);
       setReporterName(result.user.displayName);
       setReporterType(result.user.role === 'parent' ? 'parent' : 'athlete');
       setActiveTab('start');
       setAuthView('login');
-      await fetchAbsenceFeed();
       if (result.user.role === 'parent') {
         await loadLinkedChildren();
       } else if (result.user.role === 'child') {
@@ -408,30 +516,8 @@ export default function App() {
     }
   };
 
-  const onSetupPassword = async () => {
-    setAuthError('');
-    setAuthMessage('');
-
-    if (!setupTokenInput.trim() || !setupPasswordInput.trim()) {
-      setAuthError('Bitte Token und neues Passwort eingeben.');
-      return;
-    }
-
-    try {
-      const result = await setupPassword(setupTokenInput.trim(), setupPasswordInput);
-      setAuthMessage(result.message);
-      setSetupTokenInput('');
-      setSetupPasswordInput('');
-      setAuthView('login');
-      setLastSetupLink('');
-    } catch (requestError) {
-      setAuthError(
-        requestError instanceof Error ? requestError.message : 'Passwort konnte nicht gesetzt werden.',
-      );
-    }
-  };
-
-  const onLogout = () => {
+  const onLogout = async () => {
+    await AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setAuthToken('');
     setCurrentUser(null);
     setEmail('');
@@ -500,6 +586,7 @@ export default function App() {
     }
 
     await createAbsence({
+      token: authToken,
       athleteName: athleteDisplayName,
       reporterName: reporterName.trim(),
       reporterType,
@@ -507,7 +594,9 @@ export default function App() {
       trainingStartIso: trainingStart.toISOString(),
       reasonText: isLateCancellation ? lateReason.trim() : undefined,
     });
-    await fetchAbsenceFeed();
+    if (currentUser?.role === 'trainer' || currentUser?.role === 'admin') {
+      await fetchAbsenceFeed();
+    }
 
     setSuccess('Krankmeldung gespeichert. Standardstatus bleibt ansonsten: Anwesend.');
     setAthleteName('');
@@ -554,41 +643,79 @@ export default function App() {
     }
   };
 
-  const onLinkAccounts = async () => {
+  const onCreateParentForChild = async (
+    childUser: AppUser,
+    parentEmailInput: string,
+    parentDisplayNameInput: string,
+    mode: 'create' | 'link-existing',
+  ): Promise<boolean> => {
     setAdminError('');
+    setLastSetupLink('');
 
     if (!authToken) {
       setAdminError('Bitte erneut anmelden.');
-      return;
+      return false;
     }
 
-    if (!parentIdForLink.trim() || !childIdForLink.trim()) {
-      setAdminError('Bitte Parent User ID und Child User ID eingeben.');
-      return;
+    if (childUser.role !== 'child') {
+      setAdminError('Elternaccount kann nur für ein Kind erstellt werden.');
+      return false;
     }
 
     try {
-      const parentUser = users.find((u) => u.id === parseInt(parentIdForLink));
-      const childUser = users.find((u) => u.id === parseInt(childIdForLink));
-      
-      if (!parentUser || !childUser) {
-        setAdminError('Benutzer mit angegebenen IDs nicht gefunden.');
-        return;
+      const parentEmail = parentEmailInput.trim().toLowerCase();
+      const parentDisplayName = parentDisplayNameInput.trim();
+
+      if (!parentEmail) {
+        setAdminError('Bitte Eltern E-Mail eingeben.');
+        return false;
+      }
+
+      let setupLink: string | undefined;
+
+      if (mode === 'create') {
+        if (!parentDisplayName) {
+          setAdminError('Bitte Namen für den Elternaccount eingeben.');
+          return false;
+        }
+
+        const createdParent = await createUser(authToken, {
+          email: parentEmail,
+          displayName: parentDisplayName,
+          role: 'parent',
+        });
+        setupLink = createdParent.setupLink;
       }
 
       await linkParentChild(authToken, {
-        parentEmail: parentUser.email,
+        parentEmail,
         childEmail: childUser.email,
       });
-      setParentIdForLink('');
-      setChildIdForLink('');
+
+      if (setupLink) {
+        setLastSetupLink(setupLink);
+      }
+
+      setUsers(await listUsers(authToken));
+
       if (currentUser?.role === 'parent') {
         await loadLinkedChildren();
       }
+
+      Alert.alert(
+        'Erfolg',
+        mode === 'create'
+          ? `Elternaccount erstellt und verknüpft: ${parentEmail}`
+          : `Bestehendes Elternkonto verknüpft: ${parentEmail}`,
+      );
+      return true;
     } catch (requestError) {
       setAdminError(
-        requestError instanceof Error ? requestError.message : 'Verknüpfung fehlgeschlagen.',
+        requestError instanceof Error
+          ? requestError.message
+          : 'Elternaccount konnte nicht erstellt/verknüpft werden.',
       );
+      return false;
     }
   };
 
@@ -705,10 +832,36 @@ export default function App() {
   };
 
   // Render
+  if (isRestoringSession) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        {showIosInstallBanner ? (
+          <View style={styles.iosWebBanner}>
+            <Text style={styles.iosWebBannerText}>
+              iOS wird als Web-App unterstützt. Bitte im Safari-Menü „Zum Home-Bildschirm" nutzen.
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.authLoadingWrap}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.authLoadingText}>Anmeldung wird wiederhergestellt…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!currentUser) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="dark" />
+        {showIosInstallBanner ? (
+          <View style={styles.iosWebBanner}>
+            <Text style={styles.iosWebBannerText}>
+              iOS wird als Web-App unterstützt. Bitte im Safari-Menü „Zum Home-Bildschirm" nutzen.
+            </Text>
+          </View>
+        ) : null}
         <AuthScreen
           authView={authView}
           setAuthView={setAuthView}
@@ -716,16 +869,11 @@ export default function App() {
           setEmail={setEmail}
           password={password}
           setPassword={setPassword}
-          setupTokenInput={setupTokenInput}
-          setSetupTokenInput={setSetupTokenInput}
-          setupPasswordInput={setupPasswordInput}
-          setSetupPasswordInput={setSetupPasswordInput}
           authError={authError}
           authMessage={authMessage}
           lastSetupLink={lastSetupLink}
           onLogin={onLogin}
           onRequestSetup={onRequestSetup}
-          onSetupPassword={onSetupPassword}
           copyToClipboard={copyToClipboard}
         />
       </SafeAreaView>
@@ -736,11 +884,25 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
+      {showIosInstallBanner ? (
+        <View style={styles.iosWebBanner}>
+          <Text style={styles.iosWebBannerText}>
+            iOS wird als Web-App unterstützt. Bitte im Safari-Menü „Zum Home-Bildschirm" nutzen.
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.topBar}>
-        <View>
-          <Text style={styles.topBarTitle}>BRC Ägir</Text>
-          <Text style={styles.topBarSubtitle}>{currentUser.displayName}</Text>
-          <Text style={styles.topBarEmail}>{currentUser.email}</Text>
+        <View style={styles.topBarLeft}>
+          <Image
+            source={require('./public/logo_aegir-e1463061635692.png')}
+            style={styles.topBarLogo}
+            resizeMode="contain"
+          />
+          <View>
+            <Text style={styles.topBarTitle}>BRC Ägir</Text>
+            <Text style={styles.topBarSubtitle}>{currentUser.displayName}</Text>
+            <Text style={styles.topBarEmail}>{currentUser.email}</Text>
+          </View>
         </View>
         <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
           <Text style={styles.logoutText}>Logout</Text>
@@ -815,11 +977,7 @@ export default function App() {
             lastSetupLink={lastSetupLink}
             onCreateUser={onCreateUser}
             onDeleteUser={onDeleteUser}
-            parentIdForLink={parentIdForLink}
-            setParentIdForLink={setParentIdForLink}
-            childIdForLink={childIdForLink}
-            setChildIdForLink={setChildIdForLink}
-            onLinkAccounts={onLinkAccounts}
+            onCreateParentForChild={onCreateParentForChild}
             copyToClipboard={copyToClipboard}
           />
         )}
@@ -862,49 +1020,87 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background,
   },
   container: {
     paddingHorizontal: 12,
     paddingVertical: 10,
     paddingBottom: 84,
   },
+  authLoadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  authLoadingText: {
+    color: colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  iosWebBanner: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: colors.surfaceMuted,
+  },
+  iosWebBannerText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   topBar: {
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#dce9f6',
+    borderBottomColor: colors.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
+  },
+  topBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
+  },
+  topBarLogo: {
+    width: 36,
+    height: 36,
   },
   topBarTitle: {
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     fontWeight: '800',
     fontSize: 18,
   },
   topBarSubtitle: {
-    color: '#60758b',
+    color: colors.textMuted,
     fontSize: 12,
   },
   topBarEmail: {
-    color: '#8aa0b6',
+    color: colors.textSoft,
     fontSize: 11,
   },
   logoutButton: {
     borderWidth: 1,
-    borderColor: '#c6dcf1',
+    borderColor: colors.borderStrong,
     borderRadius: 8,
     paddingVertical: 7,
     paddingHorizontal: 10,
-    backgroundColor: '#f4f9te',
+    backgroundColor: colors.surfaceMuted,
   },
   logoutText: {
-    color: '#2c5a85',
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -914,9 +1110,9 @@ const styles = StyleSheet.create({
     right: 10,
     bottom: 10,
     borderRadius: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#d9e9f8',
+    borderColor: colors.border,
     flexDirection: 'row',
     paddingVertical: 6,
   },
@@ -927,12 +1123,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   tabText: {
-    color: '#6c8399',
+    color: colors.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
   tabTextActive: {
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     fontWeight: '800',
   },
 });

@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../api/client';
 import type { AbsenceRecord, AppUser, TrainingGroupFull, TrainingSessionInstance } from '../types';
 import { formatGermanDateTime } from '../utils/schedule';
 import { getMyGroups, getGroupSessions } from '../api/backendApi';
+import { useAppTheme } from '../theme/colors';
 
 type StartTabProps = {
   currentUser: AppUser | null;
@@ -12,10 +13,12 @@ type StartTabProps = {
   authToken?: string;
 };
 
-const PRIMARY_BLUE = '#2d69a6';
 const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
 export function StartTab({ currentUser, sessions, todaysAbsences, authToken }: StartTabProps) {
+  const colors = useAppTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const nextTraining = sessions.at(0);
   const [myGroups, setMyGroups] = useState<TrainingGroupFull[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<TrainingSessionInstance[]>([]);
@@ -138,49 +141,49 @@ export function StartTab({ currentUser, sessions, todaysAbsences, authToken }: S
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   contentCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: '#deebf8',
+    borderColor: colors.border,
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
   },
   sectionSubtitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     marginBottom: 8,
   },
   textMuted: {
-    color: '#5d6f82',
+    color: colors.textMuted,
     fontSize: 13,
   },
   infoTile: {
     borderWidth: 1,
-    borderColor: '#d7e9f9',
+    borderColor: colors.border,
     borderRadius: 10,
     padding: 10,
     gap: 4,
-    backgroundColor: '#f6fbff',
+    backgroundColor: colors.surfaceMuted,
   },
   infoLabel: {
-    color: '#5f7590',
+    color: colors.textSoft,
     fontSize: 12,
   },
   infoValue: {
-    color: '#1d4165',
+    color: colors.text,
     fontWeight: '700',
     fontSize: 14,
   },
   infoValueSmall: {
-    color: '#1d4165',
+    color: colors.text,
     fontWeight: '600',
     fontSize: 12,
   },
@@ -188,22 +191,22 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   groupCard: {
-    backgroundColor: '#f0f8ff',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#b3d9ff',
+    borderColor: colors.border,
   },
   groupName: {
     fontSize: 15,
     fontWeight: '700',
-    color: PRIMARY_BLUE,
+    color: colors.primary,
     marginBottom: 4,
   },
   groupDescription: {
     fontSize: 13,
-    color: '#5d6f82',
+    color: colors.textMuted,
     marginBottom: 8,
   },
   scheduleList: {
@@ -212,12 +215,12 @@ const styles = StyleSheet.create({
   scheduleTitle: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#5f7590',
+    color: colors.textSoft,
     marginBottom: 4,
   },
   scheduleItem: {
     fontSize: 12,
-    color: '#1d4165',
+    color: colors.text,
     marginLeft: 4,
     marginTop: 2,
   },
@@ -225,27 +228,27 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   sessionCard: {
-    backgroundColor: '#fffbf0',
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 8,
     padding: 10,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#ffe4b3',
+    borderColor: colors.border,
   },
   sessionDate: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#996600',
+    color: colors.warning,
     marginBottom: 4,
   },
   sessionComment: {
     fontSize: 12,
-    color: '#5d6f82',
+    color: colors.textMuted,
     marginTop: 2,
   },
   sessionLocation: {
     fontSize: 12,
-    color: '#5d6f82',
+    color: colors.textMuted,
     marginTop: 2,
   },
 });

@@ -1,19 +1,28 @@
 {
   "expo": {
     "name": "BRC Ägir Anwesenheit",
-    "slug": "brc-aegir-anwesenheit",
+    "slug": "agir-anwesenheit",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "de.brcaegir.anwesenheit"
+      "bundleIdentifier": "de.brcaegir.anwesenheit",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "de.brcaegir.anwesenheit"
     },
     "web": {
       "bundler": "metro"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "5727542f-8a33-4595-b37c-df72526cbce9"
+      }
+    },
+    "owner": "brc-agir"
   }
 }

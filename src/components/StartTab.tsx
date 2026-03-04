@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { API_BASE_URL } from '../api/client';
 import type { AbsenceRecord, AppUser, TrainingGroupFull, TrainingSessionInstance } from '../types';
 import { formatGermanDateTime } from '../utils/schedule';
@@ -18,6 +18,7 @@ const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Fr
 export function StartTab({ currentUser, sessions, todaysAbsences, authToken }: StartTabProps) {
   const colors = useAppTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const isWeb = Platform.OS === 'web';
 
   const nextTraining = sessions.at(0);
   const [myGroups, setMyGroups] = useState<TrainingGroupFull[]>([]);
@@ -56,6 +57,13 @@ export function StartTab({ currentUser, sessions, todaysAbsences, authToken }: S
       setUpcomingSessions([]);
     }
   }
+
+  const openLegalPage = (path: '/impressum.html' | '/datenschutz.html') => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      return;
+    }
+    window.open(path, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <View style={styles.contentCard}>
@@ -137,6 +145,18 @@ export function StartTab({ currentUser, sessions, todaysAbsences, authToken }: S
         <Text style={styles.infoLabel}>Backend</Text>
         <Text style={styles.infoValueSmall}>{API_BASE_URL}</Text>
       </View>
+
+      {isWeb ? (
+        <View style={styles.legalLinksRow}>
+          <TouchableOpacity onPress={() => openLegalPage('/impressum.html')}>
+            <Text style={styles.legalLinkText}>Impressum</Text>
+          </TouchableOpacity>
+          <Text style={styles.legalDivider}>•</Text>
+          <TouchableOpacity onPress={() => openLegalPage('/datenschutz.html')}>
+            <Text style={styles.legalLinkText}>Datenschutzerklärung</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -186,6 +206,24 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     color: colors.text,
     fontWeight: '600',
     fontSize: 12,
+  },
+  legalLinksRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  legalLinkText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  legalDivider: {
+    color: colors.textSoft,
+    fontSize: 12,
+    fontWeight: '600',
   },
   groupsSection: {
     marginTop: 8,

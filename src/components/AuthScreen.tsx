@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { API_BASE_URL } from '../api/client';
 import { useAppTheme } from '../theme/colors';
 
@@ -36,6 +36,14 @@ export function AuthScreen({
 }: AuthScreenProps) {
   const colors = useAppTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const isWeb = Platform.OS === 'web';
+
+  const openLegalPage = (path: '/impressum.html' | '/datenschutz.html') => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      return;
+    }
+    window.open(path, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.loginContainer}>
@@ -119,6 +127,17 @@ export function AuthScreen({
         ) : null}
 
         <Text style={styles.hint}>API: {API_BASE_URL}</Text>
+        {isWeb ? (
+          <View style={styles.legalLinksRow}>
+            <TouchableOpacity onPress={() => openLegalPage('/impressum.html')}>
+              <Text style={styles.legalLinkText}>Impressum</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalDivider}>•</Text>
+            <TouchableOpacity onPress={() => openLegalPage('/datenschutz.html')}>
+              <Text style={styles.legalLinkText}>Datenschutzerklärung</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
     </ScrollView>
   );
@@ -200,6 +219,24 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
   hint: {
     color: colors.textSoft,
     fontSize: 13,
+  },
+  legalLinksRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  legalLinkText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  legalDivider: {
+    color: colors.textSoft,
+    fontSize: 12,
+    fontWeight: '600',
   },
   error: {
     color: colors.danger,

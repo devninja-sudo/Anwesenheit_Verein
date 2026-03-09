@@ -264,7 +264,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     paddingHorizontal: 10,
     paddingVertical: 9,
     backgroundColor: colors.surface,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.text,
   },
   inlineLabel: {

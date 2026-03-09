@@ -205,8 +205,8 @@ export function AdminTab({
                 ) : null}
               </>
             ) : null}
-            <TouchableOpacity style={styles.deleteHintButton} onLongPress={() => onDeleteUser(user.id)}>
-              <Text style={styles.hintSmall}>Lange drücken zum Löschen</Text>
+            <TouchableOpacity style={styles.deleteHintButton} onPress={() => onDeleteUser(user.id)}>
+              <Text style={styles.hintSmall}>Zum Löschen tippen/klicken</Text>
             </TouchableOpacity>
           </View>
         ))}
@@ -264,7 +264,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     paddingHorizontal: 10,
     paddingVertical: 9,
     backgroundColor: colors.surface,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.text,
   },
   inlineLabel: {

@@ -477,19 +477,21 @@ export function TrainerTab({ token }: Props) {
             )}
 
             {(groups || []).map((group) => (
-              <TouchableOpacity
+              <View
                 key={group.id}
                 style={[styles.groupCard, selectedGroup?.id === group.id && styles.groupCardActive]}
-                onPress={() => setSelectedGroup(group)}
-                onLongPress={() => handleDeleteGroup(group)}
               >
+                <TouchableOpacity onPress={() => setSelectedGroup(group)}>
                 <Text style={styles.groupName}>{group.name}</Text>
                 <Text style={styles.groupInfo}>
                   {group.key} | {group.schedules.length} Zeitpläne
                 </Text>
                 {group.description && <Text style={styles.groupDescription}>{group.description}</Text>}
-                <Text style={styles.groupHint}>Lange drücken zum Löschen</Text>
-              </TouchableOpacity>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.deleteHintButton} onPress={() => handleDeleteGroup(group)}>
+                  <Text style={styles.groupHint}>Gruppe löschen</Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
@@ -967,7 +969,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     borderRadius: 6,
     padding: 10,
     marginBottom: 10,
-    fontSize: 14,
+    fontSize: 16,
     backgroundColor: colors.surface,
     color: colors.text,
   },

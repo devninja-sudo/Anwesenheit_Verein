@@ -41,7 +41,12 @@ import type {
   TrainingGroupFull,
   TrainingSessionInstance,
 } from './src/types';
-import { getUpcomingScheduleSessions, isSickCallAllowed } from './src/utils/schedule';
+import {
+  getAttendanceRelevantScheduleSessions,
+  getScheduleSessionEnd,
+  getUpcomingScheduleSessions,
+  isSickCallAllowed,
+} from './src/utils/schedule';
 import { AuthScreen } from './src/components/AuthScreen';
 import { StartTab } from './src/components/StartTab';
 import { SickCallTab } from './src/components/SickCallTab';
@@ -187,7 +192,7 @@ export default function App() {
 
   const attendanceUpcomingSessions = useMemo(() => {
     if (!currentAttendanceGroup) return [];
-    return getUpcomingScheduleSessions(currentAttendanceGroup.schedules, 30);
+    return getAttendanceRelevantScheduleSessions(currentAttendanceGroup.schedules, 30, 2);
   }, [currentAttendanceGroup]);
 
   const todaysAbsences = useMemo(() => {
@@ -247,13 +252,16 @@ export default function App() {
     attendanceSessions.find((s) => s.trainingStart === selectedAttendanceSessionIso) ?? null;
 
   const canEditAttendance = useMemo(() => {
-    if (!selectedAttendanceSessionIso) return false;
-    const sessionTime = new Date(selectedAttendanceSessionIso).getTime();
+    if (!selectedAttendanceSessionIso || !currentAttendanceGroup) return false;
+    const trainingStart = new Date(selectedAttendanceSessionIso);
+    if (Number.isNaN(trainingStart.getTime())) return false;
+
+    const trainingEnd = getScheduleSessionEnd(trainingStart, currentAttendanceGroup.schedules);
     const now = Date.now();
     const fourHours = 4 * 60 * 60 * 1000;
-    // Can edit 4 hours before and 4 hours after
-    return now >= sessionTime - fourHours && now <= sessionTime + fourHours;
-  }, [selectedAttendanceSessionIso]);
+    // Can edit 4 hours before start and until 4 hours after end.
+    return now >= trainingStart.getTime() - fourHours && now <= trainingEnd.getTime() + fourHours;
+  }, [selectedAttendanceSessionIso, currentAttendanceGroup]);
 
   // Data loading
   const fetchAbsenceFeed = React.useCallback(async () => {

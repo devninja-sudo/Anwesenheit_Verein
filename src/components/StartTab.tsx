@@ -21,13 +21,17 @@ export function StartTab({ currentUser, sessions, todaysAbsences, authToken }: S
   const isWeb = Platform.OS === 'web';
 
   const nextTraining = sessions.at(0);
+  const isTrainerView = currentUser?.role === 'trainer' || currentUser?.role === 'admin';
   const [myGroups, setMyGroups] = useState<TrainingGroupFull[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<TrainingSessionInstance[]>([]);
 
   useEffect(() => {
-    if (authToken && currentUser?.role === 'child') {
+    if (authToken && currentUser && currentUser.role !== 'parent') {
       loadMyGroups();
+      return;
     }
+    setMyGroups([]);
+    setUpcomingSessions([]);
   }, [authToken, currentUser]);
 
   async function loadMyGroups() {
@@ -67,26 +71,49 @@ export function StartTab({ currentUser, sessions, todaysAbsences, authToken }: S
 
   return (
     <View style={styles.contentCard}>
-      <Text style={styles.sectionTitle}>Start</Text>
+      <Text style={styles.sectionTitle}>{isTrainerView ? 'Start (Trainer)' : 'Start (Athlet)'}</Text>
       <Text style={styles.textMuted}>Willkommen, {currentUser?.displayName || 'Mitglied'}.</Text>
       <Text style={styles.textMuted}>{currentUser?.email}</Text>
 
-      <View style={styles.infoTile}>
-        <Text style={styles.infoLabel}>Standardstatus</Text>
-        <Text style={styles.infoValue}>Anwesend</Text>
-      </View>
-
-      <View style={styles.infoTile}>
-        <Text style={styles.infoLabel}>Nächstes Training</Text>
-        <Text style={styles.infoValue}>
-          {nextTraining ? formatGermanDateTime(nextTraining) : 'Kein Termin gefunden'}
-        </Text>
-      </View>
-
-      <View style={styles.infoTile}>
-        <Text style={styles.infoLabel}>Krankmeldungen heute</Text>
-        <Text style={styles.infoValue}>{todaysAbsences.length}</Text>
-      </View>
+      {isTrainerView ? (
+        <>
+          <View style={styles.infoTile}>
+            <Text style={styles.infoLabel}>Nächster Termin in gewählter Gruppe</Text>
+            <Text style={styles.infoValue}>
+              {nextTraining ? formatGermanDateTime(nextTraining) : 'Kein Termin gefunden'}
+            </Text>
+          </View>
+          <View style={styles.infoTile}>
+            <Text style={styles.infoLabel}>Krankmeldungen heute</Text>
+            <Text style={styles.infoValue}>{todaysAbsences.length}</Text>
+          </View>
+          <View style={styles.infoTile}>
+            <Text style={styles.infoLabel}>Anwesenheit</Text>
+            <Text style={styles.infoValueSmall}>
+              Bearbeitung ist 4h vor Trainingsbeginn bis 4h nach Trainingsende möglich.
+            </Text>
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={styles.infoTile}>
+            <Text style={styles.infoLabel}>Standardstatus</Text>
+            <Text style={styles.infoValue}>Anwesend</Text>
+          </View>
+          <View style={styles.infoTile}>
+            <Text style={styles.infoLabel}>Nächstes Training</Text>
+            <Text style={styles.infoValue}>
+              {nextTraining ? formatGermanDateTime(nextTraining) : 'Kein Termin gefunden'}
+            </Text>
+          </View>
+          <View style={styles.infoTile}>
+            <Text style={styles.infoLabel}>Abmeldung</Text>
+            <Text style={styles.infoValueSmall}>
+              Unter 24h vor Trainingsbeginn ist eine Begründung erforderlich.
+            </Text>
+          </View>
+        </>
+      )}
 
       {/* Training Groups Section */}
       {myGroups.length > 0 && (
@@ -120,7 +147,7 @@ export function StartTab({ currentUser, sessions, todaysAbsences, authToken }: S
       {/* Upcoming Sessions with Comments */}
       {upcomingSessions.length > 0 && (
         <View style={styles.sessionsSection}>
-          <Text style={styles.sectionSubtitle}>Besondere Hinweise</Text>
+          <Text style={styles.sectionSubtitle}>{isTrainerView ? 'Nächste Sessions' : 'Besondere Hinweise'}</Text>
           {(upcomingSessions || []).map((session) => (
             <View key={session.id} style={styles.sessionCard}>
               <Text style={styles.sessionDate}>

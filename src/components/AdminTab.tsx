@@ -1,11 +1,9 @@
 import React from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
-import type { AbsenceRecord, AppUser, CreateUserRole } from '../types';
-import { formatGermanDateTime } from '../utils/schedule';
+import type { AppUser, CreateUserRole } from '../types';
 import { useAppTheme } from '../theme/colors';
 
 type AdminTabProps = {
-  allAbsences: AbsenceRecord[];
   allUsers: AppUser[];
   newUserEmail: string;
   setNewUserEmail: (email: string) => void;
@@ -29,7 +27,6 @@ type AdminTabProps = {
 };
 
 export function AdminTab({
-  allAbsences,
   allUsers,
   newUserEmail,
   setNewUserEmail,
@@ -205,34 +202,13 @@ export function AdminTab({
                 ) : null}
               </>
             ) : null}
-            <TouchableOpacity style={styles.deleteHintButton} onPress={() => onDeleteUser(user.id)}>
-              <Text style={styles.hintSmall}>Zum Löschen tippen/klicken</Text>
+            <TouchableOpacity style={styles.deleteButton} onPress={() => onDeleteUser(user.id)}>
+              <Text style={styles.deleteButtonText}>Account löschen</Text>
             </TouchableOpacity>
           </View>
         ))}
       </ScrollView>
 
-      <Text style={styles.subHeading}>Alle Krankmeldungen</Text>
-      <ScrollView style={styles.absencesList}>
-        {allAbsences.length === 0 ? (
-          <Text style={styles.hint}>Keine Krankmeldungen vorhanden.</Text>
-        ) : (
-          allAbsences.map((absence) => (
-            <View key={absence.id} style={styles.absenceItem}>
-              <Text style={styles.absenceName}>
-                #{absence.id} · {absence.athleteName}
-              </Text>
-              <Text style={styles.absenceMeta}>
-                {formatGermanDateTime(new Date(absence.trainingStartIso ?? absence.trainingStart ?? ''))}
-              </Text>
-              <Text style={styles.absenceMeta}>von {absence.reporterName}</Text>
-              {absence.reasonText ? (
-                <Text style={styles.absenceReason}>Grund: {absence.reasonText}</Text>
-              ) : null}
-            </View>
-          ))
-        )}
-      </ScrollView>
     </View>
   );
 }
@@ -358,40 +334,9 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     color: colors.textMuted,
     fontSize: 11,
   },
-  absencesList: {
-    maxHeight: 300,
-  },
-  absenceItem: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 6,
-    backgroundColor: colors.surfaceMuted,
-  },
-  absenceName: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  absenceMeta: {
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-  absenceReason: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontStyle: 'italic',
-    marginTop: 2,
-  },
   hint: {
     color: colors.textSoft,
     fontSize: 13,
-  },
-  hintSmall: {
-    color: colors.textSoft,
-    fontSize: 11,
-    marginTop: 4,
   },
   linkParentButton: {
     marginTop: 8,
@@ -408,8 +353,20 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     fontSize: 12,
     fontWeight: '700',
   },
-  deleteHintButton: {
+  deleteButton: {
+    marginTop: 8,
     alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.danger,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: colors.surface,
+  },
+  deleteButtonText: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '700',
   },
   parentFormBox: {
     marginTop: 8,

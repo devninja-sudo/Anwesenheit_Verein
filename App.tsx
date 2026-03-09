@@ -195,18 +195,6 @@ export default function App() {
     return getAttendanceRelevantScheduleSessions(currentAttendanceGroup.schedules, 30, 2);
   }, [currentAttendanceGroup]);
 
-  const todaysAbsences = useMemo(() => {
-    const now = new Date();
-    return absences.filter((absence) => {
-      const reported = new Date(absence.reportedAtIso);
-      return (
-        reported.getDate() === now.getDate() &&
-        reported.getMonth() === now.getMonth() &&
-        reported.getFullYear() === now.getFullYear()
-      );
-    });
-  }, [absences]);
-
   const calendarDays = useMemo(() => {
     // Only show sessions from backend (includes cancellation status)
     const now = new Date();
@@ -250,6 +238,7 @@ export default function App() {
 
   const currentAttendanceSession =
     attendanceSessions.find((s) => s.trainingStart === selectedAttendanceSessionIso) ?? null;
+  const [creatingAttendanceSessionIso, setCreatingAttendanceSessionIso] = useState<string | null>(null);
 
   const canEditAttendance = useMemo(() => {
     if (!selectedAttendanceSessionIso || !currentAttendanceGroup) return false;
@@ -362,6 +351,48 @@ export default function App() {
     [authToken, selectedAttendanceSessionIso],
   );
 
+  const ensureAttendanceSession = React.useCallback(
+    async (trainingStartIso: string, groupKey: string) => {
+      if (!authToken || !trainingStartIso || !groupKey) {
+        return;
+      }
+
+      const existing = attendanceSessions.find((session) => session.trainingStart === trainingStartIso);
+      if (existing) {
+        return;
+      }
+
+      if (creatingAttendanceSessionIso === trainingStartIso) {
+        return;
+      }
+
+      setCreatingAttendanceSessionIso(trainingStartIso);
+      try {
+        const created = await createAttendanceSession(authToken, {
+          groupKey,
+          trainingStartIso,
+        });
+        setAttendanceSessions((prev) => {
+          const exists = prev.some((session) => session.id === created.id);
+          return exists ? prev : [created, ...prev];
+        });
+      } catch {
+        await loadAttendanceData();
+      } finally {
+        setCreatingAttendanceSessionIso(null);
+      }
+    },
+    [authToken, attendanceSessions, creatingAttendanceSessionIso, loadAttendanceData],
+  );
+
+  const onSelectAttendanceSession = React.useCallback(
+    async (iso: string) => {
+      setSelectedAttendanceSessionIso(iso);
+      await ensureAttendanceSession(iso, selectedAttendanceGroup);
+    },
+    [ensureAttendanceSession, selectedAttendanceGroup],
+  );
+
   // Initial data load and effects
   React.useEffect(() => {
     fetchAbsenceFeed();
@@ -432,6 +463,29 @@ export default function App() {
     }
     setSelectedAttendanceSessionIso('');
   }, [selectedAttendanceGroup, attendanceUpcomingSessions]);
+
+  React.useEffect(() => {
+    if (
+      !authToken ||
+      activeTab !== 'attendance' ||
+      !selectedAttendanceSessionIso ||
+      !selectedAttendanceGroup ||
+      currentAttendanceSession ||
+      creatingAttendanceSessionIso === selectedAttendanceSessionIso
+    ) {
+      return;
+    }
+
+    ensureAttendanceSession(selectedAttendanceSessionIso, selectedAttendanceGroup);
+  }, [
+    authToken,
+    activeTab,
+    selectedAttendanceSessionIso,
+    selectedAttendanceGroup,
+    currentAttendanceSession,
+    creatingAttendanceSessionIso,
+    ensureAttendanceSession,
+  ]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -738,49 +792,35 @@ export default function App() {
       return;
     }
 
+    const performDelete = async () => {
+      try {
+        await deleteUser(authToken, userId);
+        setUsers((prev) => prev.filter((entry) => entry.id !== userId));
+      } catch (requestError) {
+        setAdminError(
+          requestError instanceof Error ? requestError.message : 'Benutzer konnte nicht gelöscht werden.',
+        );
+      }
+    };
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const confirmed = window.confirm(`${user.displayName} wirklich löschen?`);
+      if (confirmed) {
+        await performDelete();
+      }
+      return;
+    }
+
     Alert.alert('Benutzer löschen', `${user.displayName} wirklich löschen?`, [
       { text: 'Abbrechen', style: 'cancel' },
       {
         text: 'Löschen',
         style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteUser(authToken, userId);
-            setUsers((prev) => prev.filter((entry) => entry.id !== userId));
-          } catch (requestError) {
-            setAdminError(
-              requestError instanceof Error ? requestError.message : 'Benutzer konnte nicht gelöscht werden.',
-            );
-          }
+        onPress: () => {
+          void performDelete();
         },
       },
     ]);
-  };
-
-  // Attendance handlers
-  const onCreateSession = async () => {
-    setAdminError('');
-
-    if (!authToken || !selectedAttendanceSessionIso) {
-      setAdminError('Bitte erneut anmelden und Trainingstermin auswählen.');
-      return;
-    }
-
-    try {
-      const created = await createAttendanceSession(authToken, {
-        groupKey: selectedAttendanceGroup,
-        trainingStartIso: selectedAttendanceSessionIso,
-      });
-      const updatedSessions = [created, ...attendanceSessions];
-      setAttendanceSessions(updatedSessions);
-      // Don't reload all sessions - we just created one
-      // Just load the entries for the new session
-      await loadAttendanceEntries(updatedSessions);
-    } catch (requestError) {
-      setAdminError(
-        requestError instanceof Error ? requestError.message : 'Anwesenheitsliste konnte nicht erstellt werden.',
-      );
-    }
   };
 
   const onToggleAttendance = async (childId: number, newStatus: 'present' | 'excused' | 'unexcused') => {
@@ -794,25 +834,22 @@ export default function App() {
     }
   };
 
-  // Export CSV when attendance tab is active and session is selected
+  // Export CSV for all attendance sessions when attendance tab is active.
   React.useEffect(() => {
     const generateCsv = async () => {
-      if (!authToken || activeTab !== 'attendance' || !currentAttendanceSession) {
+      if (!authToken || activeTab !== 'attendance') {
         setCsvExport('');
         return;
       }
       try {
-        const csv = await exportAttendanceCsv(authToken, {
-          from: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-          to: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        });
+        const csv = await exportAttendanceCsv(authToken);
         setCsvExport(csv);
       } catch {
         setCsvExport('');
       }
     };
     generateCsv();
-  }, [authToken, activeTab, currentAttendanceSession]);
+  }, [authToken, activeTab]);
 
   const copyToClipboard = async (value: string) => {
     if (!value) return;
@@ -919,7 +956,7 @@ export default function App() {
 
       <ScrollView contentContainerStyle={styles.container}>
         {activeTab === 'start' && (
-          <StartTab currentUser={currentUser} sessions={sessions} todaysAbsences={todaysAbsences} authToken={authToken} />
+          <StartTab currentUser={currentUser} absences={absences} authToken={authToken} />
         )}
         {activeTab === 'meldung' && (
           <SickCallTab
@@ -940,6 +977,7 @@ export default function App() {
             calendarDays={calendarDays}
             selectedSessionIso={selectedSessionIso}
             isLateCancellation={isLateCancellation}
+            showLateReasonDropdown={currentUser.role === 'child'}
             lateReason={lateReason}
             setLateReason={setLateReason}
             error={error}
@@ -957,13 +995,17 @@ export default function App() {
             setSelectedGroup={setSelectedAttendanceGroup}
             sessions={attendanceUpcomingSessions}
             selectedAttendanceSessionIso={selectedAttendanceSessionIso}
-            setSelectedAttendanceSessionIso={setSelectedAttendanceSessionIso}
+            onSelectAttendanceSession={onSelectAttendanceSession}
             currentAttendanceSession={currentAttendanceSession}
+            isOpeningSelectedSession={
+              !!selectedAttendanceSessionIso &&
+              creatingAttendanceSessionIso === selectedAttendanceSessionIso &&
+              !currentAttendanceSession
+            }
             excusedChildren={excusedChildren}
             attendanceEntries={attendanceEntries}
             csvExport={csvExport}
             canEditAttendance={canEditAttendance}
-            onCreateSession={onCreateSession}
             onToggleAttendance={onToggleAttendance}
             copyToClipboard={copyToClipboard}
             downloadCsv={downloadCsv}
@@ -971,7 +1013,6 @@ export default function App() {
         )}
         {activeTab === 'admin' && (
           <AdminTab
-            allAbsences={absences}
             allUsers={users}
             newUserEmail={newUserEmail}
             setNewUserEmail={setNewUserEmail}

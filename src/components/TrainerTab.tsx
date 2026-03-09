@@ -51,6 +51,7 @@ type Props = {
 type TabView = 'groups' | 'schedules' | 'members' | 'sessions';
 
 export function TrainerTab({ token }: Props) {
+  const HOLD_TO_DELETE_MS = 650;
   const colors = useAppTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
@@ -87,6 +88,8 @@ export function TrainerTab({ token }: Props) {
   const [sessionComment, setSessionComment] = useState('');
   const [sessionLocation, setSessionLocation] = useState('');
   const [sessionMinTrainers, setSessionMinTrainers] = useState('1');
+  const groupHoldTimers = React.useRef<Record<number, ReturnType<typeof setTimeout> | undefined>>({});
+  const groupHoldTriggered = React.useRef<Record<number, boolean>>({});
 
   useEffect(() => {
     loadGroups();
@@ -418,6 +421,42 @@ export function TrainerTab({ token }: Props) {
     }
   }
 
+  function startGroupHold(group: TrainingGroupFull) {
+    if (groupHoldTimers.current[group.id]) {
+      clearTimeout(groupHoldTimers.current[group.id]);
+    }
+    groupHoldTriggered.current[group.id] = false;
+    groupHoldTimers.current[group.id] = setTimeout(() => {
+      groupHoldTriggered.current[group.id] = true;
+      handleDeleteGroup(group);
+    }, HOLD_TO_DELETE_MS);
+  }
+
+  function stopGroupHold(groupId: number) {
+    if (groupHoldTimers.current[groupId]) {
+      clearTimeout(groupHoldTimers.current[groupId]);
+      groupHoldTimers.current[groupId] = undefined;
+    }
+  }
+
+  function handleGroupPress(group: TrainingGroupFull) {
+    if (groupHoldTriggered.current[group.id]) {
+      groupHoldTriggered.current[group.id] = false;
+      return;
+    }
+    setSelectedGroup(group);
+  }
+
+  useEffect(() => {
+    return () => {
+      Object.values(groupHoldTimers.current).forEach((timer) => {
+        if (timer) {
+          clearTimeout(timer);
+        }
+      });
+    };
+  }, []);
+
   const availableUsers = allUsers.filter((u) => u.role === 'child' && !members.some((m) => m.userId === u.id));
 
   return (
@@ -477,21 +516,20 @@ export function TrainerTab({ token }: Props) {
             )}
 
             {(groups || []).map((group) => (
-              <View
+              <TouchableOpacity
                 key={group.id}
                 style={[styles.groupCard, selectedGroup?.id === group.id && styles.groupCardActive]}
+                onPressIn={() => startGroupHold(group)}
+                onPressOut={() => stopGroupHold(group.id)}
+                onPress={() => handleGroupPress(group)}
               >
-                <TouchableOpacity onPress={() => setSelectedGroup(group)}>
                 <Text style={styles.groupName}>{group.name}</Text>
                 <Text style={styles.groupInfo}>
                   {group.key} | {group.schedules.length} Zeitpläne
                 </Text>
                 {group.description && <Text style={styles.groupDescription}>{group.description}</Text>}
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteHintButton} onPress={() => handleDeleteGroup(group)}>
-                  <Text style={styles.groupHint}>Gruppe löschen</Text>
-                </TouchableOpacity>
-              </View>
+                <Text style={styles.groupHint}>Gedrückt halten zum Löschen</Text>
+              </TouchableOpacity>
             ))}
           </View>
         )}

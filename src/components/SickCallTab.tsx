@@ -22,12 +22,21 @@ type SickCallTabProps = {
   calendarDays: Array<{ date: Date; sessions: Date[]; isCancelled?: boolean; userAbsence?: AbsenceRecord }>;
   selectedSessionIso: string;
   isLateCancellation: boolean;
+  showLateReasonDropdown: boolean;
   lateReason: string;
   setLateReason: (reason: string) => void;
   error: string;
   success: string;
   submitSickCall: () => void;
 };
+
+const ATHLETE_LATE_REASON_OPTIONS = [
+  'Krankheitssymptome akut',
+  'Verletzung kurzfristig',
+  'Schulischer Termin',
+  'Familiaerer Notfall',
+  'Transportproblem',
+] as const;
 
 export function SickCallTab({
   currentUser,
@@ -47,6 +56,7 @@ export function SickCallTab({
   calendarDays,
   selectedSessionIso,
   isLateCancellation,
+  showLateReasonDropdown,
   lateReason,
   setLateReason,
   error,
@@ -55,6 +65,7 @@ export function SickCallTab({
 }: SickCallTabProps) {
   const colors = useAppTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const [isReasonDropdownOpen, setIsReasonDropdownOpen] = React.useState(false);
 
   const formatGermanDate = (value: Date): string => {
     return new Intl.DateTimeFormat('de-DE', {
@@ -200,7 +211,35 @@ export function SickCallTab({
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {success ? <Text style={styles.success}>{success}</Text> : null}
 
-      {isLateCancellation ? (
+      {isLateCancellation && showLateReasonDropdown ? (
+        <View style={styles.reasonDropdownWrap}>
+          <Text style={styles.inlineLabel}>Grund der kurzfristigen Abmeldung</Text>
+          <TouchableOpacity
+            style={styles.reasonDropdownButton}
+            onPress={() => setIsReasonDropdownOpen((prev) => !prev)}
+          >
+            <Text style={styles.reasonDropdownButtonText}>
+              {lateReason || 'Bitte Grund auswählen'}
+            </Text>
+          </TouchableOpacity>
+          {isReasonDropdownOpen ? (
+            <View style={styles.reasonDropdownMenu}>
+              {ATHLETE_LATE_REASON_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={styles.reasonOption}
+                  onPress={() => {
+                    setLateReason(option);
+                    setIsReasonDropdownOpen(false);
+                  }}
+                >
+                  <Text style={styles.reasonOptionText}>{option}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : isLateCancellation ? (
         <TextInput
           style={styles.input}
           placeholder="Grund bei kurzfristiger Abmeldung"
@@ -389,5 +428,37 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     color: colors.warning,
     fontSize: 12,
     fontWeight: '600',
+  },
+  reasonDropdownWrap: {
+    gap: 6,
+  },
+  reasonDropdownButton: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
+    backgroundColor: colors.surface,
+  },
+  reasonDropdownButtonText: {
+    color: colors.text,
+    fontSize: 14,
+  },
+  reasonDropdownMenu: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceMuted,
+    overflow: 'hidden',
+  },
+  reasonOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  reasonOptionText: {
+    color: colors.text,
+    fontSize: 13,
   },
 });

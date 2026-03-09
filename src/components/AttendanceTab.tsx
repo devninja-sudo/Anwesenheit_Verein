@@ -10,13 +10,13 @@ type AttendanceTabProps = {
   setSelectedGroup: (group: string) => void;
   sessions: Date[];
   selectedAttendanceSessionIso: string;
-  setSelectedAttendanceSessionIso: (iso: string) => void;
+  onSelectAttendanceSession: (iso: string) => void;
   currentAttendanceSession: AttendanceSession | null;
+  isOpeningSelectedSession?: boolean;
   excusedChildren: ExcusedChild[];
   attendanceEntries: AttendanceEntry[];
   csvExport: string;
   canEditAttendance: boolean;
-  onCreateSession: () => void;
   onToggleAttendance: (childId: number, newStatus: 'present' | 'excused' | 'unexcused') => void;
   copyToClipboard: (text: string) => void;
   downloadCsv: (text: string) => void;
@@ -28,13 +28,13 @@ export function AttendanceTab({
   setSelectedGroup,
   sessions,
   selectedAttendanceSessionIso,
-  setSelectedAttendanceSessionIso,
+  onSelectAttendanceSession,
   currentAttendanceSession,
+  isOpeningSelectedSession = false,
   excusedChildren,
   attendanceEntries,
   csvExport,
   canEditAttendance,
-  onCreateSession,
   onToggleAttendance,
   copyToClipboard,
   downloadCsv,
@@ -89,124 +89,122 @@ export function AttendanceTab({
           ) : (
             <View style={styles.calendarWrap}>
               {sessions.slice(0, 14).map((session) => {
-          const iso = session.toISOString();
-          return (
-            <TouchableOpacity
-              key={iso}
-              style={[
-                styles.calendarSession,
-                selectedAttendanceSessionIso === iso && styles.calendarSessionActive,
-              ]}
-              onPress={() => setSelectedAttendanceSessionIso(iso)}
-            >
-              <Text
-                style={[
-                  styles.calendarSessionText,
-                  selectedAttendanceSessionIso === iso && styles.calendarSessionTextActive,
-                ]}
-              >
-                {formatGermanDateTime(session)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-          )}
+                const iso = session.toISOString();
+                const isSelected = selectedAttendanceSessionIso === iso;
 
-      {!currentAttendanceSession && selectedAttendanceSessionIso ? (
-        <TouchableOpacity style={styles.submitButton} onPress={onCreateSession}>
-          <Text style={styles.submitText}>Session erstellen</Text>
-        </TouchableOpacity>
-      ) : null}
+                return (
+                  <View key={iso} style={styles.sessionBlock}>
+                    <TouchableOpacity
+                      style={[styles.calendarSession, isSelected && styles.calendarSessionActive]}
+                      onPress={() => onSelectAttendanceSession(iso)}
+                    >
+                      <Text
+                        style={[styles.calendarSessionText, isSelected && styles.calendarSessionTextActive]}
+                      >
+                        {formatGermanDateTime(session)}
+                      </Text>
+                    </TouchableOpacity>
 
-      {currentAttendanceSession ? (
-        <>
-          <Text style={styles.textMuted}>
-            Session für {formatGermanDateTime(new Date(currentAttendanceSession.trainingStart))}
-          </Text>
+                    {isSelected && !currentAttendanceSession && isOpeningSelectedSession ? (
+                      <Text style={styles.textMuted}>Session wird geoeffnet...</Text>
+                    ) : null}
 
-          {!canEditAttendance && (
-            <View style={styles.warningBox}>
-              <Text style={styles.warningText}>
-                ⚠️ Anwesenheit kann nur 4 Stunden vor bis 4 Stunden nach dem Training bearbeitet werden.
-              </Text>
+                    {isSelected && currentAttendanceSession ? (
+                      <View style={styles.sessionDetailsWrap}>
+                        <Text style={styles.textMuted}>
+                          Training am {formatGermanDateTime(new Date(currentAttendanceSession.trainingStart))}
+                        </Text>
+
+                        {!canEditAttendance && (
+                          <View style={styles.warningBox}>
+                            <Text style={styles.warningText}>
+                              Anwesenheit kann nur 4 Stunden vor bis 4 Stunden nach dem Training bearbeitet werden.
+                            </Text>
+                          </View>
+                        )}
+
+                        <Text style={styles.inlineLabel}>Anwesenheitsliste</Text>
+                        {excusedChildren.map((child) => {
+                          const entry = attendanceEntries.find((e) => e.childId === child.id);
+                          const status = entry?.status ?? 'unexcused';
+
+                          return (
+                            <View key={child.id} style={styles.attendanceRow}>
+                              <Text style={styles.attendanceName}>{child.displayName}</Text>
+                              <View style={styles.statusButtons}>
+                                <TouchableOpacity
+                                  style={[
+                                    styles.statusButton,
+                                    status === 'present' && styles.statusButtonPresent,
+                                    !canEditAttendance && styles.statusButtonDisabled,
+                                  ]}
+                                  onPress={() => onToggleAttendance(child.id, 'present')}
+                                  disabled={!canEditAttendance}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.statusButtonText,
+                                      status === 'present' && styles.statusButtonTextActive,
+                                    ]}
+                                  >
+                                    ✓
+                                  </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[
+                                    styles.statusButton,
+                                    status === 'excused' && styles.statusButtonExcused,
+                                    !canEditAttendance && styles.statusButtonDisabled,
+                                  ]}
+                                  onPress={() => onToggleAttendance(child.id, 'excused')}
+                                  disabled={!canEditAttendance}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.statusButtonText,
+                                      status === 'excused' && styles.statusButtonTextActive,
+                                    ]}
+                                  >
+                                    E
+                                  </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[
+                                    styles.statusButton,
+                                    status === 'unexcused' && styles.statusButtonUnexcused,
+                                    !canEditAttendance && styles.statusButtonDisabled,
+                                  ]}
+                                  onPress={() => onToggleAttendance(child.id, 'unexcused')}
+                                  disabled={!canEditAttendance}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.statusButtonText,
+                                      status === 'unexcused' && styles.statusButtonTextActive,
+                                    ]}
+                                  >
+                                    U
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          );
+                        })}
+
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
             </View>
           )}
 
-          <Text style={styles.inlineLabel}>Anwesenheitsliste</Text>
-          {excusedChildren.map((child) => {
-            const entry = attendanceEntries.find((e) => e.childId === child.id);
-            const status = entry?.status ?? 'unexcused';
-
-            return (
-              <View key={child.id} style={styles.attendanceRow}>
-                <Text style={styles.attendanceName}>{child.displayName}</Text>
-                <View style={styles.statusButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.statusButton,
-                      status === 'present' && styles.statusButtonPresent,
-                      !canEditAttendance && styles.statusButtonDisabled,
-                    ]}
-                    onPress={() => onToggleAttendance(child.id, 'present')}
-                    disabled={!canEditAttendance}
-                  >
-                    <Text
-                      style={[
-                        styles.statusButtonText,
-                        status === 'present' && styles.statusButtonTextActive,
-                      ]}
-                    >
-                      ✓
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.statusButton,
-                      status === 'excused' && styles.statusButtonExcused,
-                      !canEditAttendance && styles.statusButtonDisabled,
-                    ]}
-                    onPress={() => onToggleAttendance(child.id, 'excused')}
-                    disabled={!canEditAttendance}
-                  >
-                    <Text
-                      style={[
-                        styles.statusButtonText,
-                        status === 'excused' && styles.statusButtonTextActive,
-                      ]}
-                    >
-                      E
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.statusButton,
-                      status === 'unexcused' && styles.statusButtonUnexcused,
-                      !canEditAttendance && styles.statusButtonDisabled,
-                    ]}
-                    onPress={() => onToggleAttendance(child.id, 'unexcused')}
-                    disabled={!canEditAttendance}
-                  >
-                    <Text
-                      style={[
-                        styles.statusButtonText,
-                        status === 'unexcused' && styles.statusButtonTextActive,
-                      ]}
-                    >
-                      U
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })}
-
           {csvExport ? (
             <View style={styles.linkBox}>
-              <Text style={styles.linkLabel}>CSV Export</Text>
+              <Text style={styles.linkLabel}>CSV Export (alle Einheiten)</Text>
               <View style={styles.csvButtonsRow}>
                 <TouchableOpacity style={styles.downloadButton} onPress={() => downloadCsv(csvExport)}>
-                  <Text style={styles.downloadButtonText}>⬇️ CSV herunterladen</Text>
+                  <Text style={styles.downloadButtonText}>CSV herunterladen</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.copyButton} onPress={() => copyToClipboard(csvExport)}>
                   <Text style={styles.copyButtonText}>CSV kopieren</Text>
@@ -214,8 +212,6 @@ export function AttendanceTab({
               </View>
             </View>
           ) : null}
-        </>
-      ) : null}
         </>
       )}
     </View>
@@ -274,6 +270,17 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
   calendarWrap: {
     gap: 6,
   },
+  sessionBlock: {
+    gap: 6,
+  },
+  sessionDetailsWrap: {
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 8,
+    backgroundColor: colors.surfaceMuted,
+  },
   calendarSession: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -293,18 +300,6 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
   calendarSessionTextActive: {
     color: colors.primary,
     fontWeight: '700',
-  },
-  submitButton: {
-    marginTop: 8,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 11,
-    alignItems: 'center',
-  },
-  submitText: {
-    color: colors.buttonPrimaryText,
-    fontWeight: '700',
-    fontSize: 14,
   },
   attendanceRow: {
     flexDirection: 'row',

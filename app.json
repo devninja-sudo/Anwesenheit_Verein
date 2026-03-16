@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/android-chrome-512x512.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "de.brcaegir.anwesenheit",
@@ -17,6 +18,7 @@
     },
     "web": {
       "bundler": "metro",
+      "favicon": "./assets/favicon.ico",
       "meta": {
         "viewport": "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
       }

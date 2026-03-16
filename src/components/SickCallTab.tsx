@@ -1,13 +1,11 @@
 import React from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import type { AbsenceRecord, AppUser, ChildLink, ReporterType } from '../types';
+import type { AbsenceRecord, AppUser, ChildLink, TrainingSessionInstance } from '../types';
 import { formatGermanDateTime } from '../utils/schedule';
 import { useAppTheme } from '../theme/colors';
 
 type SickCallTabProps = {
   currentUser: AppUser;
-  reporterType: ReporterType;
-  setReporterType: (type: ReporterType) => void;
   linkedChildren: ChildLink[];
   selectedChildId: number | null;
   setSelectedChildId: (id: number | null) => void;
@@ -19,7 +17,12 @@ type SickCallTabProps = {
   selectedGroup: string;
   setSelectedGroup: (group: string) => void;
   setSelectedSessionIso: (iso: string) => void;
-  calendarDays: Array<{ date: Date; sessions: Date[]; isCancelled?: boolean; userAbsence?: AbsenceRecord }>;
+  calendarDays: Array<{
+    date: Date;
+    sessions: TrainingSessionInstance[];
+    isCancelled?: boolean;
+    userAbsence?: AbsenceRecord;
+  }>;
   selectedSessionIso: string;
   isLateCancellation: boolean;
   showLateReasonDropdown: boolean;
@@ -40,8 +43,6 @@ const ATHLETE_LATE_REASON_OPTIONS = [
 
 export function SickCallTab({
   currentUser,
-  reporterType,
-  setReporterType,
   linkedChildren,
   selectedChildId,
   setSelectedChildId,
@@ -79,23 +80,6 @@ export function SickCallTab({
     <View style={styles.contentCard}>
       <Text style={styles.sectionTitle}>Krankmeldung</Text>
       <Text style={styles.textMuted}>Abmeldung unter 24h ist mit Begründung möglich.</Text>
-
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={[styles.chip, reporterType === 'athlete' && styles.chipActive]}
-          onPress={() => setReporterType('athlete')}
-          disabled={currentUser?.role === 'parent'}
-        >
-          <Text style={styles.chipText}>Athlet</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.chip, reporterType === 'parent' && styles.chipActive]}
-          onPress={() => setReporterType('parent')}
-          disabled={currentUser?.role === 'child'}
-        >
-          <Text style={styles.chipText}>Elternteil</Text>
-        </TouchableOpacity>
-      </View>
 
       {currentUser?.role === 'parent' ? (
         <>
@@ -162,10 +146,14 @@ export function SickCallTab({
       ) : (
         <View style={styles.calendarWrap}>
           {calendarDays.map((day) => {
-            const session = day.sessions[0];
-            const iso = session?.toISOString() || '';
             const isCancelled = day.isCancelled;
             const hasUserAbsence = !!day.userAbsence;
+            const daySessions = [...day.sessions].sort((a, b) => {
+              if (a.sessionType !== b.sessionType) {
+                return a.sessionType === 'event' ? -1 : 1;
+              }
+              return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+            });
 
             return (
               <View key={day.date.toISOString()} style={styles.calendarDayCard}>
@@ -180,28 +168,51 @@ export function SickCallTab({
                     <Text style={styles.absenceText}>✓ Bereits abgemeldet</Text>
                   </View>
                 ) : null}
-                {session ? (
-                  <TouchableOpacity
-                    key={iso}
-                    style={[
-                      styles.calendarSession,
-                      selectedSessionIso === iso && styles.calendarSessionActive,
-                      isCancelled && styles.calendarSessionCancelled,
-                      hasUserAbsence && styles.calendarSessionAbsent,
-                    ]}
-                    onPress={() => setSelectedSessionIso(iso)}
-                    disabled={isCancelled}
-                  >
-                    <Text
-                      style={[
-                        styles.calendarSessionText,
-                        selectedSessionIso === iso && styles.calendarSessionTextActive,
-                      ]}
-                    >
-                      {formatGermanDateTime(session)}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
+                {daySessions.map((session) => {
+                  const iso = session.scheduledDate;
+                  const isSelected = selectedSessionIso === iso;
+
+                  return (
+                    <View key={`${session.id}-${iso}`} style={styles.sessionActionRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.calendarSession,
+                          isSelected && styles.calendarSessionActive,
+                          session.isCancelled && styles.calendarSessionCancelled,
+                          hasUserAbsence && styles.calendarSessionAbsent,
+                        ]}
+                        onPress={() => setSelectedSessionIso(iso)}
+                        disabled={session.isCancelled}
+                      >
+                        <View style={styles.sessionHeaderRow}>
+                          <Text
+                            style={[
+                              styles.sessionTypeBadge,
+                              session.sessionType === 'event' ? styles.sessionTypeBadgeEvent : styles.sessionTypeBadgeTraining,
+                            ]}
+                          >
+                            {session.sessionType === 'event' ? 'Veranstaltung' : 'Training'}
+                          </Text>
+                          {session.title ? <Text style={styles.sessionTitle}>{session.title}</Text> : null}
+                        </View>
+                        <Text
+                          style={[
+                            styles.calendarSessionText,
+                            isSelected && styles.calendarSessionTextActive,
+                          ]}
+                        >
+                          {formatGermanDateTime(new Date(session.scheduledDate))}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {isSelected ? (
+                        <TouchableOpacity style={styles.inlineSubmitButton} onPress={submitSickCall}>
+                          <Text style={styles.inlineSubmitText}>Abmelden</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  );
+                })}
               </View>
             );
           })}
@@ -249,9 +260,6 @@ export function SickCallTab({
         />
       ) : null}
 
-      <TouchableOpacity style={styles.submitButton} onPress={submitSickCall}>
-        <Text style={styles.submitText}>Krank melden</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -375,6 +383,7 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     fontSize: 12,
   },
   calendarSession: {
+    flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
@@ -402,6 +411,51 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
   calendarSessionAbsent: {
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.warning,
+  },
+  sessionActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sessionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
+  sessionTypeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  sessionTypeBadgeTraining: {
+    backgroundColor: colors.surfaceMuted,
+    color: colors.textMuted,
+  },
+  sessionTypeBadgeEvent: {
+    backgroundColor: colors.warning,
+    color: colors.surface,
+  },
+  sessionTitle: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  inlineSubmitButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineSubmitText: {
+    color: colors.buttonPrimaryText,
+    fontWeight: '700',
+    fontSize: 13,
   },
   cancelledBanner: {
     backgroundColor: colors.surfaceMuted,

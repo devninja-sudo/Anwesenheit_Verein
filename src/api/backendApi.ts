@@ -14,6 +14,7 @@ import {
   ExcusedChild,
   GroupMember,
   ReporterType,
+  SessionType,
   TrainingGroupFull,
   TrainingSessionInstance,
   TrainerAvailabilityStatus,
@@ -121,6 +122,9 @@ export async function createAbsence(payload: {
   reporterName: string;
   reporterType: ReporterType;
   groupKey: string;
+  sessionId?: number;
+  sessionType?: SessionType;
+  sessionLabel?: string;
   trainingStartIso: string;
   reasonText?: string;
 }): Promise<AbsenceRecord> {

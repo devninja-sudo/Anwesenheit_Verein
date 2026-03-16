@@ -37,14 +37,12 @@ import type {
   ChildLink,
   CreateUserRole,
   ExcusedChild,
-  ReporterType,
   TrainingGroupFull,
   TrainingSessionInstance,
 } from './src/types';
 import {
   getAttendanceRelevantScheduleSessions,
   getScheduleSessionEnd,
-  getUpcomingScheduleSessions,
   isSickCallAllowed,
 } from './src/utils/schedule';
 import { AuthScreen } from './src/components/AuthScreen';
@@ -93,7 +91,6 @@ export default function App() {
   // Sick call states
   const [athleteName, setAthleteName] = useState('');
   const [reporterName, setReporterName] = useState('');
-  const [reporterType, setReporterType] = useState<ReporterType>('athlete');
   const [selectedGroup, setSelectedGroup] = useState<string>('');
   const [selectedAttendanceGroup, setSelectedAttendanceGroup] = useState<string>('');
   const [trainingGroups, setTrainingGroups] = useState<TrainingGroupFull[]>([]);
@@ -180,11 +177,6 @@ export default function App() {
     [trainingGroups],
   );
 
-  const sessions = useMemo(() => {
-    if (!currentGroup) return [];
-    return getUpcomingScheduleSessions(currentGroup.schedules, 30);
-  }, [currentGroup]);
-
   const currentAttendanceGroup = useMemo(
     () => trainingGroups.find((group) => group.key === selectedAttendanceGroup) ?? null,
     [trainingGroups, selectedAttendanceGroup],
@@ -196,45 +188,124 @@ export default function App() {
   }, [currentAttendanceGroup]);
 
   const calendarDays = useMemo(() => {
-    // Only show sessions from backend (includes cancellation status)
-    const now = new Date();
-    const dateMap = new Map<string, { session: TrainingSessionInstance; userAbsence?: AbsenceRecord }>();
+    const dateMap = new Map<
+      string,
+      { date: Date; sessions: TrainingSessionInstance[]; isCancelled: boolean; userAbsence?: AbsenceRecord }
+    >();
 
-    // Map sessions by date
+    const expandSessionOccurrences = (session: TrainingSessionInstance): TrainingSessionInstance[] => {
+      if (session.sessionType !== 'event' || !session.endDate) {
+        return [session];
+      }
+
+      const start = new Date(session.scheduledDate);
+      const end = new Date(session.endDate);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() < start.getTime()) {
+        return [session];
+      }
+
+      const startHours = start.getHours();
+      const startMinutes = start.getMinutes();
+      const endHours = end.getHours();
+      const endMinutes = end.getMinutes();
+      const items: TrainingSessionInstance[] = [];
+
+      const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0);
+      const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 0, 0, 0, 0);
+
+      while (cursor.getTime() <= endDay.getTime()) {
+        const dayStart = new Date(
+          cursor.getFullYear(),
+          cursor.getMonth(),
+          cursor.getDate(),
+          startHours,
+          startMinutes,
+          0,
+          0,
+        );
+        const dayEnd = new Date(
+          cursor.getFullYear(),
+          cursor.getMonth(),
+          cursor.getDate(),
+          endHours,
+          endMinutes,
+          0,
+          0,
+        );
+
+        items.push({
+          ...session,
+          scheduledDate: dayStart.toISOString(),
+          endDate: dayEnd.toISOString(),
+        });
+
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      return items;
+    };
+
     groupSessions.forEach((session) => {
-      const sessionDate = new Date(session.scheduledDate);
-      const dateKey = sessionDate.toISOString().split('T')[0]!;
-      dateMap.set(dateKey, { session });
+      const occurrences = expandSessionOccurrences(session);
+      occurrences.forEach((occurrence) => {
+        const sessionDate = new Date(occurrence.scheduledDate);
+        const dateKey = sessionDate.toISOString().split('T')[0]!;
+        const entry = dateMap.get(dateKey) ?? {
+          date: sessionDate,
+          sessions: [],
+          isCancelled: true,
+          userAbsence: undefined,
+        };
+
+        entry.sessions.push(occurrence);
+        entry.isCancelled = entry.isCancelled && occurrence.isCancelled;
+        dateMap.set(dateKey, entry);
+      });
     });
 
-    // Map user's absences to sessions
     absences.forEach((absence) => {
       const absenceDate = new Date(absence.trainingStartIso);
       const dateKey = absenceDate.toISOString().split('T')[0]!;
       const entry = dateMap.get(dateKey);
-      if (entry && athleteName && absence.athleteName.toLowerCase() === athleteName.toLowerCase()) {
-        entry.userAbsence = absence;
+      if (!entry || !athleteName) {
+        return;
       }
+      if (absence.athleteName.toLowerCase() !== athleteName.toLowerCase()) {
+        return;
+      }
+      entry.userAbsence = absence;
     });
 
-    // Convert to calendar days array
     return Array.from(dateMap.values())
-      .map(({ session, userAbsence }) => ({
-        date: new Date(session.scheduledDate),
-        sessions: [new Date(session.scheduledDate)],
-        isCancelled: session.isCancelled,
-        userAbsence,
+      .map((entry) => ({
+        ...entry,
+        sessions: entry.sessions.sort((a, b) => {
+          if (a.sessionType !== b.sessionType) {
+            return a.sessionType === 'event' ? -1 : 1;
+          }
+          return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+        }),
       }))
       .sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [groupSessions, absences, athleteName]);
 
+  const selectedCalendarSession = useMemo(() => {
+    for (const day of calendarDays) {
+      const session = day.sessions.find((item) => item.scheduledDate === selectedSessionIso);
+      if (session) {
+        return session;
+      }
+    }
+    return null;
+  }, [calendarDays, selectedSessionIso]);
+
   const isLateCancellation = useMemo(() => {
-    if (!selectedSessionIso) return false;
-    const trainingStart = new Date(selectedSessionIso);
+    if (!selectedCalendarSession || selectedCalendarSession.sessionType === 'event') return false;
+    const trainingStart = new Date(selectedCalendarSession.scheduledDate);
     const diffMs = trainingStart.getTime() - new Date().getTime();
     if (Number.isNaN(diffMs)) return false;
     return diffMs >= 0 && diffMs < 24 * 60 * 60 * 1000;
-  }, [selectedSessionIso]);
+  }, [selectedCalendarSession]);
 
   const currentAttendanceSession =
     attendanceSessions.find((s) => s.trainingStart === selectedAttendanceSessionIso) ?? null;
@@ -399,11 +470,11 @@ export default function App() {
   }, [fetchAbsenceFeed]);
 
   React.useEffect(() => {
-    const firstSession = sessions.at(0);
+    const firstSession = calendarDays.at(0)?.sessions.at(0);
     if (firstSession && !selectedSessionIso) {
-      setSelectedSessionIso(firstSession.toISOString());
+      setSelectedSessionIso(firstSession.scheduledDate);
     }
-  }, [sessions, selectedSessionIso]);
+  }, [calendarDays, selectedSessionIso]);
 
   React.useEffect(() => {
     if (!authToken || activeTab !== 'admin') return;
@@ -505,7 +576,6 @@ export default function App() {
         setAuthToken(storedToken);
         setCurrentUser(user);
         setReporterName(user.displayName);
-        setReporterType(user.role === 'parent' ? 'parent' : 'athlete');
         setActiveTab('start');
         if (user.role === 'child') {
           setAthleteName(user.displayName);
@@ -542,7 +612,6 @@ export default function App() {
       setAuthToken(result.accessToken);
       setCurrentUser(result.user);
       setReporterName(result.user.displayName);
-      setReporterType(result.user.role === 'parent' ? 'parent' : 'athlete');
       setActiveTab('start');
       setAuthView('login');
       if (result.user.role === 'parent') {
@@ -629,23 +698,48 @@ export default function App() {
       return;
     }
 
+    if (!selectedCalendarSession) {
+      setError('Ausgewählter Termin konnte nicht geladen werden.');
+      return;
+    }
+
     if (!selectedGroup) {
       setError('Bitte eine Trainingsgruppe auswählen.');
       return;
     }
 
-    const trainingStart = new Date(selectedSessionIso);
+    const trainingStart = new Date(selectedCalendarSession.scheduledDate);
 
     const now = new Date();
-    if (!isSickCallAllowed(trainingStart, now) && !isLateCancellation) {
+    const isEvent = selectedCalendarSession.sessionType === 'event';
+
+    if (isEvent) {
+      const deadline = selectedCalendarSession.eventDeadline
+        ? new Date(selectedCalendarSession.eventDeadline)
+        : new Date(trainingStart.getTime() - 24 * 60 * 60 * 1000);
+
+      if (trainingStart.getTime() <= now.getTime()) {
+        setError('Abmeldung für bereits gestartete Veranstaltungen ist nicht möglich.');
+        return;
+      }
+
+      if (deadline.getTime() < now.getTime()) {
+        setError('Die Abmeldefrist für diese Veranstaltung ist abgelaufen.');
+        return;
+      }
+    }
+
+    if (!isEvent && !isSickCallAllowed(trainingStart, now) && !isLateCancellation) {
       setError('Abmeldung ist für vergangene Termine nicht möglich.');
       return;
     }
 
-    if (isLateCancellation && !lateReason.trim()) {
+    if (!isEvent && isLateCancellation && !lateReason.trim()) {
       setError('Bei Abmeldung unter 24 Stunden ist ein Grund erforderlich.');
       return;
     }
+
+    const reporterType = currentUser?.role === 'parent' ? 'parent' : 'athlete';
 
     await createAbsence({
       token: authToken,
@@ -653,8 +747,11 @@ export default function App() {
       reporterName: reporterName.trim(),
       reporterType,
       groupKey: selectedGroup,
+      sessionId: selectedCalendarSession.id > 0 ? selectedCalendarSession.id : undefined,
+      sessionType: selectedCalendarSession.sessionType,
+      sessionLabel: selectedCalendarSession.title ?? undefined,
       trainingStartIso: trainingStart.toISOString(),
-      reasonText: isLateCancellation ? lateReason.trim() : undefined,
+      reasonText: !isEvent && isLateCancellation ? lateReason.trim() : undefined,
     });
     if (currentUser?.role === 'trainer' || currentUser?.role === 'admin') {
       await fetchAbsenceFeed();
@@ -961,8 +1058,6 @@ export default function App() {
         {activeTab === 'meldung' && (
           <SickCallTab
             currentUser={currentUser}
-            reporterType={reporterType}
-            setReporterType={setReporterType}
             linkedChildren={linkedChildren}
             selectedChildId={selectedChildId}
             setSelectedChildId={setSelectedChildId}

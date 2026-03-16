@@ -1,4 +1,5 @@
 export type ReporterType = 'athlete' | 'parent';
+export type SessionType = 'training' | 'event';
 
 export type AthleteGroupKey = 'junior' | 'youth' | 'performance';
 
@@ -39,8 +40,13 @@ export type TrainingGroupFull = {
 export type TrainingSessionInstance = {
   id: number;
   groupId: number;
+  sessionType: SessionType;
+  title?: string | null;
   scheduleId: number | null;
   scheduledDate: string; // ISO date
+  endDate?: string | null;
+  eventDeadline?: string | null;
+  eventGroupIds?: number[];
   comment?: string | null;
   location?: string | null;
   isCancelled: boolean;
@@ -106,7 +112,12 @@ export type UpdateScheduleInput = {
 
 export type CreateSessionInput = {
   groupId: number;
+  sessionType?: SessionType;
+  title?: string;
   scheduledDate: string;
+  endDate?: string;
+  eventDeadline?: string;
+  eventGroupIds?: number[];
   comment?: string;
   location?: string;
   minTrainers?: number;
@@ -114,8 +125,13 @@ export type CreateSessionInput = {
 
 export type UpdateSessionInput = {
   groupId?: number;
+  sessionType?: SessionType;
+  title?: string;
   scheduleId?: number;
   scheduledDate?: string;
+  endDate?: string;
+  eventDeadline?: string;
+  eventGroupIds?: number[];
   comment?: string;
   location?: string;
   isCancelled?: boolean;
@@ -132,7 +148,10 @@ export type AbsenceRecord = {
   athleteName: string;
   reporterName: string;
   reporterType: ReporterType;
-  groupKey: AthleteGroupKey;
+  groupKey: string;
+  sessionId?: number | null;
+  sessionType?: SessionType;
+  sessionLabel?: string | null;
   trainingStartIso: string;
   reportedAtIso: string;
   trainingStart?: string;

@@ -12,6 +12,7 @@ import {
 import type {
   AppUser,
   GroupMember,
+  SessionType,
   TrainingGroupFull,
   TrainingSessionInstance,
 } from '../types';
@@ -84,7 +85,12 @@ export function TrainerTab({ token }: Props) {
   >(null);
 
   const [showCreateSession, setShowCreateSession] = useState(false);
+  const [sessionType, setSessionType] = useState<SessionType>('training');
+  const [sessionTitle, setSessionTitle] = useState('');
   const [sessionDate, setSessionDate] = useState('');
+  const [sessionEndDate, setSessionEndDate] = useState('');
+  const [sessionEventDeadline, setSessionEventDeadline] = useState('');
+  const [sessionEventGroupIds, setSessionEventGroupIds] = useState<number[]>([]);
   const [sessionComment, setSessionComment] = useState('');
   const [sessionLocation, setSessionLocation] = useState('');
   const [sessionMinTrainers, setSessionMinTrainers] = useState('1');
@@ -336,18 +342,51 @@ export function TrainerTab({ token }: Props) {
       Alert.alert('Fehler', 'Datum ist erforderlich');
       return;
     }
+
+    if (sessionType === 'event') {
+      if (!sessionTitle.trim()) {
+        Alert.alert('Fehler', 'Titel ist für Veranstaltungen erforderlich');
+        return;
+      }
+      if (!sessionEndDate.trim()) {
+        Alert.alert('Fehler', 'Ende ist für Veranstaltungen erforderlich');
+        return;
+      }
+      if (!sessionLocation.trim()) {
+        Alert.alert('Fehler', 'Ort ist für Veranstaltungen erforderlich');
+        return;
+      }
+      if (!sessionComment.trim()) {
+        Alert.alert('Fehler', 'Notiz ist für Veranstaltungen erforderlich');
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       await createTrainingSession(token, {
         groupId: selectedGroup.id,
+        sessionType,
+        title: sessionType === 'event' ? sessionTitle.trim() : undefined,
         scheduledDate: sessionDate,
+        endDate: sessionType === 'event' ? sessionEndDate : undefined,
+        eventDeadline: sessionType === 'event' && sessionEventDeadline ? sessionEventDeadline : undefined,
+        eventGroupIds:
+          sessionType === 'event'
+            ? Array.from(new Set([selectedGroup.id, ...sessionEventGroupIds]))
+            : undefined,
         comment: sessionComment,
         location: sessionLocation,
         minTrainers: Math.max(1, Number(sessionMinTrainers) || 1),
       });
       await loadSessions(selectedGroup.id);
       setShowCreateSession(false);
+      setSessionType('training');
+      setSessionTitle('');
       setSessionDate('');
+      setSessionEndDate('');
+      setSessionEventDeadline('');
+      setSessionEventGroupIds([]);
       setSessionComment('');
       setSessionLocation('');
       setSessionMinTrainers('1');
@@ -817,16 +856,87 @@ export function TrainerTab({ token }: Props) {
             {showCreateSession && (
               <View style={styles.formCard}>
                 <Text style={styles.formTitle}>Neuer Termin</Text>
+                <View style={styles.rowWrap}>
+                  <TouchableOpacity
+                    style={[styles.typeChip, sessionType === 'training' && styles.typeChipActive]}
+                    onPress={() => setSessionType('training')}
+                  >
+                    <Text style={[styles.typeChipText, sessionType === 'training' && styles.typeChipTextActive]}>
+                      Training
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.typeChip, sessionType === 'event' && styles.typeChipActive]}
+                    onPress={() => setSessionType('event')}
+                  >
+                    <Text style={[styles.typeChipText, sessionType === 'event' && styles.typeChipTextActive]}>
+                      Veranstaltung
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {sessionType === 'event' ? (
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Titel"
+                    placeholderTextColor="#999"
+                    value={sessionTitle}
+                    onChangeText={setSessionTitle}
+                  />
+                ) : null}
                 <TextInput
                   style={styles.input}
-                  placeholder="Datum (YYYY-MM-DD)"
+                  placeholder={sessionType === 'event' ? 'Start (YYYY-MM-DDTHH:mm:ss)' : 'Datum (YYYY-MM-DD)'}
                   placeholderTextColor="#999"
                   value={sessionDate}
                   onChangeText={setSessionDate}
                 />
+                {sessionType === 'event' ? (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ende (YYYY-MM-DDTHH:mm:ss)"
+                      placeholderTextColor="#999"
+                      value={sessionEndDate}
+                      onChangeText={setSessionEndDate}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Abmeldefrist (YYYY-MM-DDTHH:mm:ss, optional)"
+                      placeholderTextColor="#999"
+                      value={sessionEventDeadline}
+                      onChangeText={setSessionEventDeadline}
+                    />
+                    <Text style={styles.label}>Zusätzliche Gruppen für diese Veranstaltung</Text>
+                    <View style={styles.rowWrap}>
+                      {groups.map((group) => {
+                        const active = group.id === selectedGroup.id || sessionEventGroupIds.includes(group.id);
+                        return (
+                          <TouchableOpacity
+                            key={`event-group-${group.id}`}
+                            style={[styles.groupChip, active && styles.groupChipActive]}
+                            onPress={() => {
+                              if (group.id === selectedGroup.id) {
+                                return;
+                              }
+                              setSessionEventGroupIds((prev) =>
+                                prev.includes(group.id)
+                                  ? prev.filter((id) => id !== group.id)
+                                  : [...prev, group.id],
+                              );
+                            }}
+                          >
+                            <Text style={[styles.groupChipText, active && styles.groupChipTextActive]}>
+                              {group.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
                 <TextInput
                   style={[styles.input, styles.inputMultiline]}
-                  placeholder="Kommentar (z.B. Training in der Schwimmhalle)"
+                  placeholder={sessionType === 'event' ? 'Notiz' : 'Kommentar (z.B. Training in der Schwimmhalle)'}
                   placeholderTextColor="#999"
                   value={sessionComment}
                   onChangeText={setSessionComment}
@@ -839,14 +949,16 @@ export function TrainerTab({ token }: Props) {
                   value={sessionLocation}
                   onChangeText={setSessionLocation}
                 />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Minimale Trainerzahl"
-                  placeholderTextColor="#999"
-                  keyboardType="number-pad"
-                  value={sessionMinTrainers}
-                  onChangeText={setSessionMinTrainers}
-                />
+                {sessionType === 'training' ? (
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Minimale Trainerzahl"
+                    placeholderTextColor="#999"
+                    keyboardType="number-pad"
+                    value={sessionMinTrainers}
+                    onChangeText={setSessionMinTrainers}
+                  />
+                ) : null}
                 <View style={styles.buttonRow}>
                   <TouchableOpacity style={styles.submitButton} onPress={handleCreateSession} disabled={loading}>
                     <Text style={styles.submitButtonText}>Erstellen</Text>
@@ -859,7 +971,17 @@ export function TrainerTab({ token }: Props) {
             )}
 
             {(sessions || [])
-              .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())
+              .sort((a, b) => {
+                const dayA = a.scheduledDate.slice(0, 10);
+                const dayB = b.scheduledDate.slice(0, 10);
+                if (dayA !== dayB) {
+                  return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+                }
+                if (a.sessionType !== b.sessionType) {
+                  return a.sessionType === 'event' ? -1 : 1;
+                }
+                return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+              })
               .map((session) => (
                 <View
                   key={session.id}
@@ -870,6 +992,10 @@ export function TrainerTab({ token }: Props) {
                   ]}
                 >
                   <View style={styles.sessionInfo}>
+                    <Text style={styles.sessionTypeLine}>
+                      {session.sessionType === 'event' ? 'Veranstaltung' : 'Training'}
+                      {session.title ? ` · ${session.title}` : ''}
+                    </Text>
                     <Text style={styles.sessionDate}>
                       {new Date(session.scheduledDate).toLocaleDateString('de-DE', {
                         weekday: 'short',
@@ -878,13 +1004,25 @@ export function TrainerTab({ token }: Props) {
                         year: 'numeric',
                       })}
                     </Text>
+                    {session.sessionType === 'event' && session.endDate ? (
+                      <Text style={styles.sessionMetaRow}>
+                        Ende: {new Date(session.endDate).toLocaleString('de-DE')}
+                      </Text>
+                    ) : null}
+                    {session.sessionType === 'event' ? (
+                      <Text style={styles.sessionMetaRow}>
+                        Abmeldefrist: {session.eventDeadline ? new Date(session.eventDeadline).toLocaleString('de-DE') : '24h vor Start'}
+                      </Text>
+                    ) : null}
                     {session.comment && <Text style={styles.sessionComment}>💬 {session.comment}</Text>}
                     {session.location && <Text style={styles.sessionLocation}>📍 {session.location}</Text>}
                     {session.isCancelled && <Text style={styles.cancelledLabel}>❌ Ausgefallen</Text>}
-                    <Text style={styles.sessionMetaRow}>
-                      Min. Trainer: {session.minTrainers ?? 1} · A {session.availabilitySummary?.available ?? 0} · U {session.availabilitySummary?.uncertain ?? 0} · N {session.availabilitySummary?.notAvailable ?? 0}
-                    </Text>
-                    {session.availabilitySummary?.isWarning && !session.isCancelled && session.id > 0 ? (
+                    {session.sessionType === 'training' ? (
+                      <Text style={styles.sessionMetaRow}>
+                        Min. Trainer: {session.minTrainers ?? 1} · A {session.availabilitySummary?.available ?? 0} · U {session.availabilitySummary?.uncertain ?? 0} · N {session.availabilitySummary?.notAvailable ?? 0}
+                      </Text>
+                    ) : null}
+                    {session.sessionType === 'training' && session.availabilitySummary?.isWarning && !session.isCancelled && session.id > 0 ? (
                       <View style={styles.warningBanner}>
                         <Text style={styles.warningText}>⚠️ Mindestanzahl Trainer noch nicht erreicht</Text>
                         <TouchableOpacity style={styles.warningDismissButton} onPress={() => handleDismissWarning(session)}>
@@ -892,26 +1030,28 @@ export function TrainerTab({ token }: Props) {
                         </TouchableOpacity>
                       </View>
                     ) : null}
-                    <View style={styles.availabilityRow}>
-                      <TouchableOpacity
-                        style={[styles.availabilityButton, session.myTrainerStatus === 'A' && styles.availabilityButtonActive]}
-                        onPress={() => handleTrainerAvailability(session, 'A')}
-                      >
-                        <Text style={styles.availabilityText}>A</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.availabilityButton, session.myTrainerStatus === 'U' && styles.availabilityButtonActive]}
-                        onPress={() => handleTrainerAvailability(session, 'U')}
-                      >
-                        <Text style={styles.availabilityText}>U</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.availabilityButton, session.myTrainerStatus === 'N' && styles.availabilityButtonActive]}
-                        onPress={() => handleTrainerAvailability(session, 'N')}
-                      >
-                        <Text style={styles.availabilityText}>N</Text>
-                      </TouchableOpacity>
-                    </View>
+                    {session.sessionType === 'training' ? (
+                      <View style={styles.availabilityRow}>
+                        <TouchableOpacity
+                          style={[styles.availabilityButton, session.myTrainerStatus === 'A' && styles.availabilityButtonActive]}
+                          onPress={() => handleTrainerAvailability(session, 'A')}
+                        >
+                          <Text style={styles.availabilityText}>A</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.availabilityButton, session.myTrainerStatus === 'U' && styles.availabilityButtonActive]}
+                          onPress={() => handleTrainerAvailability(session, 'U')}
+                        >
+                          <Text style={styles.availabilityText}>U</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.availabilityButton, session.myTrainerStatus === 'N' && styles.availabilityButtonActive]}
+                          onPress={() => handleTrainerAvailability(session, 'N')}
+                        >
+                          <Text style={styles.availabilityText}>N</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
                   </View>
                   <TouchableOpacity
                     style={[styles.toggleButton, session.isCancelled && styles.toggleButtonActive]}
@@ -1010,6 +1150,52 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     fontSize: 16,
     backgroundColor: colors.surface,
     color: colors.text,
+  },
+  rowWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  typeChip: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.surface,
+  },
+  typeChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceMuted,
+  },
+  typeChipText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  typeChipTextActive: {
+    color: colors.primary,
+  },
+  groupChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: colors.surface,
+  },
+  groupChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceMuted,
+  },
+  groupChipText: {
+    color: colors.text,
+    fontSize: 12,
+  },
+  groupChipTextActive: {
+    color: colors.primary,
+    fontWeight: '700',
   },
   selectInput: {
     borderWidth: 1,
@@ -1271,6 +1457,12 @@ const createStyles = (colors: ReturnType<typeof useAppTheme>) => StyleSheet.crea
     fontSize: 14,
     fontWeight: '600',
     color: colors.text,
+  },
+  sessionTypeLine: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '700',
+    marginBottom: 3,
   },
   sessionComment: {
     fontSize: 13,

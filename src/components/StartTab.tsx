@@ -21,6 +21,7 @@ export function StartTab({ currentUser, absences, authToken }: StartTabProps) {
 
   const nextSession = upcomingSessions.at(0) ?? null;
   const nextTraining = nextSession ? new Date(nextSession.scheduledDate) : null;
+  const nextSessionLabel = nextSession?.sessionType === 'event' ? 'Veranstaltung' : 'Training';
 
   const nextTrainingAbsences = React.useMemo(() => {
     if (!nextTraining || !isTrainerView) {
@@ -90,10 +91,14 @@ export function StartTab({ currentUser, absences, authToken }: StartTabProps) {
       </View>
 
       <View style={styles.infoTile}>
-        <Text style={styles.infoLabel}>Nächstes Training</Text>
+        <Text style={styles.infoLabel}>Nächster Termin</Text>
         <Text style={styles.infoValue}>
           {nextTraining ? formatGermanDateTime(nextTraining) : 'Kein kommender Termin vorhanden'}
         </Text>
+        {nextSession ? <Text style={styles.infoValueSmall}>Typ: {nextSessionLabel}</Text> : null}
+        {nextSession?.sessionType === 'event' && nextSession?.title ? (
+          <Text style={styles.infoValueSmall}>Titel: {nextSession.title}</Text>
+        ) : null}
         {nextSession?.groupId ? (
           <Text style={styles.infoValueSmall}>
             Gruppe: {allGroups.find((group) => group.id === nextSession.groupId)?.name ?? 'Unbekannt'}
@@ -113,6 +118,10 @@ export function StartTab({ currentUser, absences, authToken }: StartTabProps) {
                 <View key={String(absence.id)} style={styles.absenceRow}>
                   <Text style={styles.absenceName}>{absence.athleteName}</Text>
                   <Text style={styles.absenceMeta}>{groupNameByKey.get(absence.groupKey) ?? absence.groupKey}</Text>
+                  <Text style={styles.absenceMeta}>
+                    Typ: {absence.sessionType === 'event' ? 'Veranstaltung' : 'Training'}
+                    {absence.sessionLabel ? ` · ${absence.sessionLabel}` : ''}
+                  </Text>
                   {absence.reasonText ? <Text style={styles.absenceMeta}>Grund: {absence.reasonText}</Text> : null}
                 </View>
               ))}
